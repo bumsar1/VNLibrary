@@ -84,7 +84,7 @@ enum VNDB {
         if let http = response as? HTTPURLResponse, http.statusCode != 200 {
             let msg = String(data: data, encoding: .utf8) ?? ""
             throw NSError(domain: "VNDB", code: http.statusCode,
-                          userInfo: [NSLocalizedDescriptionKey: "VNDB svarede \(http.statusCode): \(msg)"])
+                          userInfo: [NSLocalizedDescriptionKey: "VNDB returned \(http.statusCode): \(msg)"])
         }
         return try JSONDecoder().decode(Response.self, from: data).results
     }

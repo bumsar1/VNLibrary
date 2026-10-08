@@ -46,7 +46,7 @@ struct InfoSheet: View {
                     // long tag list never pushes the text off the page.
                     ScrollView {
                         VStack(alignment: .leading, spacing: 14) {
-                            Text(info.description ?? "Ingen beskrivelse på VNDB.")
+                            Text(info.description ?? "No description on VNDB.")
                                 .font(.system(size: 13))
                                 .foregroundStyle(Color.kText.opacity(0.9))
                                 .lineSpacing(3)
@@ -64,7 +64,7 @@ struct InfoSheet: View {
                                         }
                                     }
                                 }
-                                .help("Klik på et tag for at vise alle spil med det")
+                                .help("Click a tag to show every game that has it")
                             }
                         }
                         .padding(.trailing, 8)
@@ -72,11 +72,11 @@ struct InfoSheet: View {
                     .frame(maxHeight: .infinity)
                 } else {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(lib.fetching.contains(id) ? "Henter fra VNDB…" : "Ingen VNDB-data endnu.")
+                        Text(lib.fetching.contains(id) ? "Fetching from VNDB…" : "No VNDB data yet.")
                             .font(.system(size: 13))
                             .foregroundStyle(Color.kMuted)
                         if !lib.fetching.contains(id) {
-                            Button("Find på VNDB…") { open(.vndb(id)) }
+                            Button("Find on VNDB…") { open(.vndb(id)) }
                         }
                     }
                     Spacer()
@@ -87,28 +87,28 @@ struct InfoSheet: View {
                         lib.launch(game)
                         dismiss()
                     } label: {
-                        Label(lib.running[id] != nil ? "Kører" : "Spil", systemImage: "play.fill")
+                        Label(lib.running[id] != nil ? "Running" : "Play", systemImage: "play.fill")
                     }
                     .buttonStyle(AccentButtonStyle())
                     .disabled(lib.running[id] != nil)
                     .keyboardShortcut(.defaultAction)
 
-                    Menu("Mere") {
-                        Button("Hent fra VNDB…") { open(.vndb(id)) }
-                        if let info { Button("Åbn på vndb.org") { NSWorkspace.shared.open(info.url) } }
-                        Button("Rediger…") { open(.edit(game)) }
-                        Button(game.isBlurred ? "Vis cover" : "Blur cover") { lib.toggleBlur(id) }
-                        Button("Vis i Finder") {
+                    Menu("More") {
+                        Button("Fetch from VNDB…") { open(.vndb(id)) }
+                        if let info { Button("Open on vndb.org") { NSWorkspace.shared.open(info.url) } }
+                        Button("Edit…") { open(.edit(game)) }
+                        Button(game.isBlurred ? "Show Cover" : "Blur Cover") { lib.toggleBlur(id) }
+                        Button("Show in Finder") {
                             NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: game.path)])
                         }
                         if info != nil {
                             Divider()
-                            Button("Fjern VNDB-data") { lib.forgetVNDB(id) }
+                            Button("Remove VNDB Data") { lib.forgetVNDB(id) }
                         }
                     }
                     .fixedSize()
                     Spacer()
-                    Button("Luk") { dismiss() }.keyboardShortcut(.cancelAction)
+                    Button("Close") { dismiss() }.keyboardShortcut(.cancelAction)
                 }
             }
         }
@@ -122,10 +122,10 @@ struct InfoSheet: View {
         if let info = game.vndb {
             if !info.developers.isEmpty { out.append(info.developers.joined(separator: ", ")) }
             if let y = info.year, y != "TBA" { out.append(y) }
-            if let m = info.lengthMinutes, m > 0 { out.append("ca. \(max(1, Int((Double(m) / 60).rounded()))) timer") }
+            if let m = info.lengthMinutes, m > 0 { out.append("~\(max(1, Int((Double(m) / 60).rounded()))) hours") }
             if let r = info.rating { out.append("★ " + String(format: "%.2f", r / 10)) }
         }
-        out.append(game.playSeconds > 0 ? "Spillet \(Format.playtime(game.playSeconds))" : "Ikke spillet endnu")
+        out.append(game.playSeconds > 0 ? "Played \(Format.playtime(game.playSeconds))" : "Not played yet")
         return out
     }
 }
@@ -218,16 +218,16 @@ struct VNDBSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Hent fra VNDB")
+            Text("Fetch from VNDB")
                 .font(.system(size: 18, weight: .bold))
             HStack {
-                TextField("Søg efter titel", text: $query)
+                TextField("Search by title", text: $query)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit { Task { await search() } }
-                Button("Søg") { Task { await search() } }
+                Button("Search") { Task { await search() } }
                     .disabled(query.trimmingCharacters(in: .whitespaces).isEmpty || searching)
             }
-            Toggle("Brug VNDB's titel som navn", isOn: $rename)
+            Toggle("Use VNDB's title as the name", isOn: $rename)
                 .font(.system(size: 12))
 
             ZStack {
@@ -236,7 +236,7 @@ struct VNDBSheet: View {
                 } else if let error {
                     Text(error).foregroundStyle(Color.kHinomaru).font(.system(size: 12))
                 } else if results.isEmpty {
-                    Text("Ingen resultater. Prøv en kortere titel, eller den japanske titel.")
+                    Text("No results. Try a shorter title, or the Japanese one.")
                         .foregroundStyle(.secondary).font(.system(size: 12))
                 } else {
                     ScrollView {
@@ -249,10 +249,10 @@ struct VNDBSheet: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             HStack {
-                Text("Data fra vndb.org")
+                Text("Data from vndb.org")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                 Spacer()
-                Button("Annuller") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
             }
         }
         .padding(22)
@@ -289,9 +289,9 @@ struct VNDBSheet: View {
             if applying == r.id {
                 ProgressView().controlSize(.small)
             } else if current {
-                Label("Valgt", systemImage: "checkmark").font(.system(size: 12)).foregroundStyle(Color.kDone)
+                Label("Selected", systemImage: "checkmark").font(.system(size: 12)).foregroundStyle(Color.kDone)
             }
-            Button("Vælg") {
+            Button("Select") {
                 applying = r.id
                 Task {
                     await lib.apply(r, to: id, rename: rename)
@@ -314,7 +314,7 @@ struct VNDBSheet: View {
             results = try await VNDB.search(q)
         } catch {
             results = []
-            self.error = "Kunne ikke søge på VNDB: \(error.localizedDescription)"
+            self.error = "Couldn't search VNDB: \(error.localizedDescription)"
         }
     }
 }

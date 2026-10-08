@@ -9,8 +9,8 @@ enum LaunchKind: String, Codable, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .siglus: return "Siglus (siglus_engine)"
-        case .macApp: return "Mac-app"
-        case .command: return "Egen kommando"
+        case .macApp: return "Mac app"
+        case .command: return "Custom command"
         }
     }
 }
@@ -35,9 +35,9 @@ enum SortOrder: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .recent: return "Senest spillet"
-        case .name: return "Navn"
-        case .added: return "Senest tilføjet"
+        case .recent: return "Recently played"
+        case .name: return "Name"
+        case .added: return "Recently added"
         }
     }
 }
@@ -87,6 +87,9 @@ final class Library: ObservableObject {
         autoVNDB = UserDefaults.standard.object(forKey: "autoVNDB") as? Bool ?? true
         showEroTags = UserDefaults.standard.object(forKey: "showEroTags") as? Bool ?? true
         load()
+        if ProcessInfo.processInfo.environment["VNLIB_NO_VNDB"] == nil {
+            refreshVNDB(onlyOutdated: true)
+        }
 
         NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didTerminateApplicationNotification, object: nil, queue: .main
@@ -326,7 +329,7 @@ final class Library: ObservableObject {
     // MARK: VNDB
 
     /// Takes VNDB's best match for a newly added game. Keeps the user's name;
-    /// a wrong guess is fixed with "Hent fra VNDB…".
+    /// a wrong guess is fixed with "Fetch from VNDB…".
     func autoMatch(_ id: UUID) {
         guard let game = games.first(where: { $0.id == id }) else { return }
         let query = VNDB.query(from: game.name)
@@ -367,7 +370,7 @@ final class Library: ObservableObject {
     func fetchMissingVNDB() {
         let ids = games.filter { $0.vndb == nil }.map(\.id)
         guard !ids.isEmpty else {
-            alert = "Alle spil har allerede VNDB-data."
+            alert = "Every game already has VNDB data."
             return
         }
         Task {
@@ -384,7 +387,7 @@ final class Library: ObservableObject {
                 fetching.remove(id)
             }
             if !missed.isEmpty {
-                alert = "Fandt ikke et sikkert match for:\n\(missed.joined(separator: "\n"))\n\nHøjreklik → Hent fra VNDB… for at vælge selv."
+                alert = "No confident match found for:\n\(missed.joined(separator: "\n"))\n\nRight-click → Fetch from VNDB… to pick one yourself."
             }
         }
     }
@@ -397,10 +400,14 @@ final class Library: ObservableObject {
 
     /// Re-reads VNDB data (tags, rating, description) for linked games.
     /// Covers and names are left alone.
-    func refreshVNDB() {
-        let linked = games.compactMap { g in g.vndb.map { (g.id, $0.id) } }
+    /// `onlyOutdated` limits it to data saved before sexual-content tags were
+    /// kept; that runs quietly at launch so older entries catch up by themselves.
+    func refreshVNDB(onlyOutdated: Bool = false) {
+        let linked = games.compactMap { g in g.vndb.map { (g.id, $0) } }
+            .filter { !onlyOutdated || $0.1.eroTags == nil }
+            .map { ($0.0, $0.1.id) }
         guard !linked.isEmpty else {
-            alert = "Ingen spil er koblet til VNDB endnu."
+            if !onlyOutdated { alert = "No games are linked to VNDB yet." }
             return
         }
         Task {
@@ -415,7 +422,7 @@ final class Library: ObservableObject {
                 fetching.remove(id)
             }
             save()
-            if failed > 0 { alert = "\(failed) spil kunne ikke opdateres fra VNDB." }
+            if failed > 0 && !onlyOutdated { alert = "\(failed) game(s) couldn't be updated from VNDB." }
         }
     }
 
@@ -453,7 +460,7 @@ final class Library: ObservableObject {
     func launch(_ game: Game) {
         guard running[game.id] == nil else { return }
         guard exists(game) else {
-            alert = "\(game.name) blev ikke fundet:\n\(game.path)\n\nHar du flyttet mappen? Ret stien under Rediger."
+            alert = "\(game.name) wasn't found:\n\(game.path)\n\nDid you move the folder? Fix the path under Edit."
             return
         }
         switch game.kind {
@@ -467,20 +474,20 @@ final class Library: ObservableObject {
                         self.appPIDs[pid] = game.id
                         self.started(game.id)
                     } else {
-                        self.alert = "Kunne ikke starte \(game.name): \(message ?? "ukendt fejl")"
+                        self.alert = "Couldn't start \(game.name): \(message ?? "unknown error")"
                     }
                 }
             }
         case .siglus:
             guard engineFound else {
-                alert = "siglus_engine blev ikke fundet:\n\(enginePath)\n\nVælg den rigtige sti under Indstillinger (tandhjulet)."
+                alert = "siglus_engine wasn't found:\n\(enginePath)\n\nSet the right path in Settings (the gear icon)."
                 return
             }
             run(game, executable: enginePath, arguments: ["--project-dir", game.path])
         case .command:
             let cmd = game.command.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !cmd.isEmpty else {
-                alert = "\(game.name) har ingen kommando endnu. Højreklik → Rediger for at angive, hvordan spillet startes."
+                alert = "\(game.name) has no command yet. Right-click → Edit to set how the game starts."
                 return
             }
             run(game, executable: "/bin/zsh", arguments: ["-lc", cmd])
@@ -518,7 +525,7 @@ final class Library: ObservableObject {
             processes[id] = p
             started(id)
         } catch {
-            alert = "Kunne ikke starte \(game.name): \(error.localizedDescription)"
+            alert = "Couldn't start \(game.name): \(error.localizedDescription)"
         }
     }
 
@@ -543,7 +550,7 @@ final class Library: ObservableObject {
             if let log, let text = try? String(contentsOf: log, encoding: .utf8) {
                 tail = text.split(separator: "\n").suffix(8).joined(separator: "\n")
             }
-            alert = "\(games[i].name) lukkede med fejl (kode \(status)).\n\n\(tail)"
+            alert = "\(games[i].name) quit with an error (code \(status)).\n\n\(tail)"
         }
     }
 
@@ -559,7 +566,7 @@ final class Library: ObservableObject {
         if FileManager.default.fileExists(atPath: log.path) {
             NSWorkspace.shared.open(log)
         } else {
-            alert = "Der er ingen log for \(game.name) endnu."
+            alert = "There's no log for \(game.name) yet."
         }
     }
 }
@@ -569,14 +576,14 @@ enum Format {
         let m = Int(seconds / 60)
         if m < 1 { return "under 1 min" }
         if m < 60 { return "\(m) min" }
-        return "\(m / 60) t \(m % 60) min"
+        return "\(m / 60) h \(m % 60) min"
     }
 
     static func lastPlayed(_ date: Date?) -> String {
-        guard let date else { return "Ikke spillet endnu" }
+        guard let date else { return "Not played yet" }
         let f = RelativeDateTimeFormatter()
-        f.locale = Locale(identifier: "da_DK")
+        f.locale = Locale(identifier: "en_US")
         f.unitsStyle = .full
-        return "Spillet " + f.localizedString(for: date, relativeTo: Date())
+        return "Played " + f.localizedString(for: date, relativeTo: Date())
     }
 }

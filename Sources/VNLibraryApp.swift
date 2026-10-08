@@ -17,12 +17,12 @@ struct VNLibraryApp: App {
         .defaultSize(width: 1100, height: 760)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("Tilføj spil…") {
+                Button("Add Games…") {
                     NotificationCenter.default.post(name: .addGames, object: nil)
                 }
                 .keyboardShortcut("o", modifiers: .command)
-                Button("Hent manglende fra VNDB") { Library.shared.fetchMissingVNDB() }
-                Button("Opdater VNDB-data (tags m.m.)") { Library.shared.refreshVNDB() }
+                Button("Fetch Missing from VNDB") { Library.shared.fetchMissingVNDB() }
+                Button("Update VNDB Data (Tags etc.)") { Library.shared.refreshVNDB() }
             }
         }
     }

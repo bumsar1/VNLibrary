@@ -41,7 +41,7 @@ Or build it yourself (needs Xcode):
 ## Features
 
 - **Drag & drop** — drop game folders or Mac apps into the window (or onto the Dock icon)
-- **VNDB** — cover, description, developer, release year, length, rating and tags are fetched automatically; pick the right entry yourself with *Hent fra VNDB…* if the guess was wrong
+- **VNDB** — cover, description, developer, release year, length, rating and tags are fetched automatically; pick the right entry yourself with *Fetch from VNDB…** if the guess was wrong
 - **Tags** — click a tag on a game's page, or use the **Tags** menu, to filter the library. Sexual-content tags are shown in pink and can be hidden in Settings; spoiler tags are never shown
 - **Blur cover** — per game, from the right-click menu. Covers VNDB flags as suggestive are blurred automatically. The pixels themselves are blurred, so nothing shows through
 - **Play time** — tracks when you last played and for how long

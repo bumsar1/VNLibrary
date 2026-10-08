@@ -93,8 +93,8 @@ struct ContentView: View {
         panel.allowedContentTypes = [.application, .folder]
         panel.allowsMultipleSelection = true
         panel.treatsFilePackagesAsDirectories = false
-        panel.prompt = "Tilføj"
-        panel.message = "Vælg spilmapper eller Mac-apps"
+        panel.prompt = "Add"
+        panel.message = "Choose game folders or Mac apps"
         if panel.runModal() == .OK { add(panel.urls) }
     }
 
@@ -104,14 +104,14 @@ struct ContentView: View {
                 Text("VN Library")
                     .font(.system(size: 22, weight: .bold))
                     .foregroundStyle(Color.kText)
-                Text(lib.games.count == 1 ? "1 spil" : "\(lib.games.count) spil")
+                Text(lib.games.count == 1 ? "1 game" : "\(lib.games.count) games")
                     .font(.system(size: 12))
                     .foregroundStyle(Color.kMuted)
             }
             Spacer()
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").foregroundStyle(Color.kMuted)
-                TextField("Søg", text: $search)
+                TextField("Search", text: $search)
                     .textFieldStyle(.plain)
                     .foregroundStyle(Color.kText)
                     .frame(width: 160)
@@ -129,8 +129,8 @@ struct ContentView: View {
             .labelsHidden()
             .frame(width: 150)
 
-            IconButton(symbol: "plus", help: "Tilføj spil (⌘O)") { chooseGames() }
-            IconButton(symbol: "gearshape", help: "Indstillinger") { showSettings = true }
+            IconButton(symbol: "plus", help: "Add games (⌘O)") { chooseGames() }
+            IconButton(symbol: "gearshape", help: "Settings") { showSettings = true }
         }
         .padding(.horizontal, 24)
         .padding(.top, 34)
@@ -140,12 +140,12 @@ struct ContentView: View {
     private var tagMenu: some View {
         Menu {
             if tag != nil {
-                Button("Vis alle spil") { tag = nil }
+                Button("Show all games") { tag = nil }
                 Divider()
             }
             let tags = lib.allTags
             if tags.isEmpty {
-                Text("Ingen tags endnu. Hent data fra VNDB først.")
+                Text("No tags yet. Fetch data from VNDB first.")
             }
             ForEach(tags, id: \.name) { t in
                 Button("\(t.name)  (\(t.count))") { tag = t.name }
@@ -159,7 +159,7 @@ struct ContentView: View {
         .padding(.vertical, 6)
         .background(RoundedRectangle(cornerRadius: 8).fill(tag == nil ? Color.kPanel2 : Color.kAccent.opacity(0.35)))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(tag == nil ? Color.kLine : Color.kAccent))
-        .help("Filtrer efter VNDB-tag")
+        .help("Filter by VNDB tag")
     }
 
     private var grid: some View {
@@ -174,7 +174,7 @@ struct ContentView: View {
         }
         .overlay {
             if lib.sorted(sort, filter: search, tag: tag).isEmpty {
-                Text("Ingen spil matcher.")
+                Text("No games match.")
                     .foregroundStyle(Color.kMuted)
             }
         }
@@ -186,14 +186,14 @@ struct ContentView: View {
             Image(systemName: "books.vertical")
                 .font(.system(size: 54))
                 .foregroundStyle(Color.kAccent)
-            Text("Dit bibliotek er tomt")
+            Text("Your library is empty")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(Color.kText)
-            Text("Træk en spilmappe eller en Mac-app herind,\neller klik på + for at vælge.")
+            Text("Drag a game folder or a Mac app in here,\nor click + to choose.")
                 .multilineTextAlignment(.center)
                 .font(.system(size: 13))
                 .foregroundStyle(Color.kMuted)
-            Button("Tilføj spil…") { chooseGames() }
+            Button("Add Games…") { chooseGames() }
                 .buttonStyle(AccentButtonStyle())
                 .padding(.top, 6)
             Spacer()
@@ -310,7 +310,7 @@ struct GameCard: View {
                     Color.black.opacity(isRunning ? 0.45 : 0.3)
                     if isRunning {
                         VStack(spacing: 8) {
-                            Text("Kører")
+                            Text("Running")
                                 .font(.system(size: 13, weight: .semibold))
                                 .padding(.horizontal, 12).padding(.vertical, 5)
                                 .background(Capsule().fill(Color.kDone.opacity(0.9)))
@@ -337,7 +337,7 @@ struct GameCard: View {
                 if missing {
                     VStack {
                         Spacer()
-                        Label("Mappen mangler", systemImage: "exclamationmark.triangle.fill")
+                        Label("Folder missing", systemImage: "exclamationmark.triangle.fill")
                             .font(.system(size: 11, weight: .semibold))
                             .padding(.horizontal, 8).padding(.vertical, 4)
                             .background(Capsule().fill(Color.kHinomaru))
@@ -371,28 +371,28 @@ struct GameCard: View {
         }
         .onHover { hover = $0 }
         .contextMenu {
-            Button(isRunning ? "Kører…" : "Spil") { lib.launch(game) }.disabled(isRunning)
+            Button(isRunning ? "Running…" : "Play") { lib.launch(game) }.disabled(isRunning)
             if isRunning { Button("Stop") { lib.stop(game.id) } }
             Divider()
             Button("Info") { open(.info(game.id)) }
-            Button("Hent fra VNDB…") { open(.vndb(game.id)) }
-            Button("Rediger…") { open(.edit(game)) }
-            Button("Vælg cover…") { chooseCover() }
-            Button("Find cover automatisk") { lib.setCover(game.id, from: nil) }
-            Button(game.isBlurred ? "Vis cover" : "Blur cover") { lib.toggleBlur(game.id) }
+            Button("Fetch from VNDB…") { open(.vndb(game.id)) }
+            Button("Edit…") { open(.edit(game)) }
+            Button("Choose Cover…") { chooseCover() }
+            Button("Find Cover Automatically") { lib.setCover(game.id, from: nil) }
+            Button(game.isBlurred ? "Show Cover" : "Blur Cover") { lib.toggleBlur(game.id) }
             Divider()
-            Button("Vis i Finder") {
+            Button("Show in Finder") {
                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: game.path)])
             }
-            if game.kind != .macApp { Button("Vis log") { lib.showLog(game) } }
+            if game.kind != .macApp { Button("Show Log") { lib.showLog(game) } }
             Divider()
-            Button("Fjern fra bibliotek") { lib.remove(game.id) }
+            Button("Remove from Library") { lib.remove(game.id) }
         }
     }
 
     private var subtitle: String {
-        if isRunning { return "Kører nu" }
-        if lib.fetching.contains(game.id) { return "Henter fra VNDB…" }
+        if isRunning { return "Running now" }
+        if lib.fetching.contains(game.id) { return "Fetching from VNDB…" }
         guard game.lastPlayed != nil else { return Format.lastPlayed(nil) }
         return "\(Format.lastPlayed(game.lastPlayed)) · \(Format.playtime(game.playSeconds))"
     }
@@ -400,7 +400,7 @@ struct GameCard: View {
     private func chooseCover() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.image]
-        panel.prompt = "Brug som cover"
+        panel.prompt = "Use as Cover"
         if panel.runModal() == .OK, let url = panel.url { lib.setCover(game.id, from: url) }
     }
 }
@@ -425,7 +425,7 @@ struct CoverDrop: DropDelegate {
             } else {
                 let unknown = lib.add(urls: urls)
                 if !unknown.isEmpty {
-                    lib.alert = "Tilføjet. Højreklik på det nye spil → Rediger for at angive, hvordan det startes."
+                    lib.alert = "Added. Right-click the new game → Edit to set how it starts."
                 }
             }
         }
@@ -440,19 +440,19 @@ struct EditSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Rediger spil")
+            Text("Edit Game")
                 .font(.system(size: 18, weight: .bold))
             Form {
-                TextField("Navn", text: $game.name)
-                Picker("Start med", selection: $game.kind) {
+                TextField("Name", text: $game.name)
+                Picker("Launch with", selection: $game.kind) {
                     ForEach(LaunchKind.allCases) { Text($0.label).tag($0) }
                 }
                 HStack {
-                    TextField(game.kind == .macApp ? "App" : "Mappe", text: $game.path)
-                    Button("Vælg…") { choosePath() }
+                    TextField(game.kind == .macApp ? "App" : "Folder", text: $game.path)
+                    Button("Choose…") { choosePath() }
                 }
                 if game.kind == .command {
-                    TextField("Kommando", text: $game.command, axis: .vertical)
+                    TextField("Command", text: $game.command, axis: .vertical)
                         .lineLimit(2...4)
                         .font(.system(size: 12, design: .monospaced))
                 }
@@ -465,14 +465,14 @@ struct EditSheet: View {
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack {
-                Button("Fjern fra bibliotek", role: .destructive) {
+                Button("Remove from Library", role: .destructive) {
                     lib.remove(game.id)
                     dismiss()
                 }
                 Spacer()
-                Button("Annuller") { dismiss() }
+                Button("Cancel") { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button("Gem") {
+                Button("Save") {
                     lib.update(game)
                     dismiss()
                 }
@@ -486,11 +486,11 @@ struct EditSheet: View {
     private var hint: String {
         switch game.kind {
         case .siglus:
-            return "Starter mappen med siglus_engine, som skalerer billedet til fuld skærm. Stien til siglus_engine ændres under Indstillinger."
+            return "Runs the folder with siglus_engine, which scales the game to fill the window. Set the path to siglus_engine in Settings."
         case .macApp:
-            return "Åbner en almindelig Mac-app, f.eks. en Ren'Py-port eller en CrossOver-genvej."
+            return "Opens a regular Mac app, e.g. a Ren'Py port or a CrossOver shortcut."
         case .command:
-            return "Køres i zsh med spilmappen som arbejdsmappe. $GAME_DIR er stien til mappen. Eksempel: open -a \"Whisky\" \"$GAME_DIR/game.exe\""
+            return "Runs in zsh with the game folder as working directory. $GAME_DIR is its path. Example: open -a \"Whisky\" \"$GAME_DIR/game.exe\""
         }
     }
 
@@ -513,32 +513,32 @@ struct SettingsSheet: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Indstillinger")
+            Text("Settings")
                 .font(.system(size: 18, weight: .bold))
             Form {
                 HStack {
                     TextField("siglus_engine", text: $lib.siglusEngine)
                         .font(.system(size: 12, design: .monospaced))
-                    Button("Vælg…") { choose() }
+                    Button("Choose…") { choose() }
                 }
-                Label(lib.engineFound ? "Fundet" : "Ikke fundet på den sti",
+                Label(lib.engineFound ? "Found" : "Not found at that path",
                       systemImage: lib.engineFound ? "checkmark.circle.fill" : "xmark.circle.fill")
                     .foregroundStyle(lib.engineFound ? Color.kDone : Color.kHinomaru)
             }
             .formStyle(.grouped)
-            Text("Programmet bruges til alle Siglus-spil (Key-spil som Summer Pockets, Clannad osv.).")
+            Text("Used for every Siglus game (Key games like Summer Pockets, Clannad, …).")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
             Form {
-                Toggle("Hent cover og info fra VNDB, når et spil tilføjes", isOn: $lib.autoVNDB)
-                Toggle("Vis seksuelle tags (lyserøde)", isOn: $lib.showEroTags)
+                Toggle("Fetch cover and info from VNDB when a game is added", isOn: $lib.autoVNDB)
+                Toggle("Show sexual-content tags (pink)", isOn: $lib.showEroTags)
             }
             .formStyle(.grouped)
             HStack {
-                Button("Åbn biblioteksmappen") { NSWorkspace.shared.open(lib.supportDir) }
+                Button("Open Library Folder") { NSWorkspace.shared.open(lib.supportDir) }
                 Spacer()
-                Button("Nulstil") { lib.siglusEngine = Library.defaultEngine }
-                Button("Færdig") { dismiss() }
+                Button("Reset") { lib.siglusEngine = Library.defaultEngine }
+                Button("Done") { dismiss() }
                     .keyboardShortcut(.defaultAction)
             }
         }

@@ -40,8 +40,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleName</key>             <string>VN Library</string>
     <key>CFBundleDisplayName</key>      <string>VN Library</string>
     <key>CFBundleIdentifier</key>       <string>dk.cadesign.vnlibrary</string>
-    <key>CFBundleVersion</key>          <string>1.0</string>
-    <key>CFBundleShortVersionString</key><string>1.0</string>
+    <key>CFBundleVersion</key>          <string>1.1</string>
+    <key>CFBundleShortVersionString</key><string>1.1</string>
     <key>CFBundlePackageType</key>      <string>APPL</string>
     <key>CFBundleExecutable</key>       <string>VNLibrary</string>
     <key>CFBundleIconFile</key>         <string>AppIcon</string>
@@ -63,9 +63,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 PLIST
 
 echo "→ Signing and clearing quarantine..."
-codesign --force --sign - "$APP" >/dev/null 2>&1 || echo "  (codesign sprang over)"
+codesign --force --sign - "$APP" >/dev/null 2>&1 || echo "  (codesign skipped)"
 xattr -cr "$APP"
 
 echo ""
 echo "✓ Built: $APP"
-echo "  Træk spilmapper eller Mac-apps ind i vinduet for at tilføje dem."
+echo "  Drag game folders or Mac apps into the window to add them."
