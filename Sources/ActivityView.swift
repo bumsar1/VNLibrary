@@ -169,7 +169,13 @@ struct ActivityView: View {
                 .lineLimit(1)
             Spacer()
             if let c = s.chars, c > 0 {
-                Text("\(Count.short(c)) chars").font(.system(size: 12)).foregroundStyle(Color.kMuted)
+                Button { open(.readText(s.gameID, s.id)) } label: {
+                    Label(s.seconds >= 300 ? "\(Count.short(c)) chars · \(Count.short(Int(Double(c) / (s.seconds / 3600))))/h"
+                                           : "\(Count.short(c)) chars", systemImage: "text.alignleft")
+                        .font(.system(size: 12)).foregroundStyle(Color.kAccent)
+                }
+                .buttonStyle(.plain)
+                .help("Show the text read in this session")
             }
             Text("\(Format.time(s.start)) – \(live ? "now" : Format.time(s.end))")
                 .font(.system(size: 12, design: .monospaced))
@@ -191,6 +197,7 @@ struct ActivityView: View {
         .onTapGesture { if let game { open(.info(game.id)) } }
         .contextMenu {
             if let game { Button("Info") { open(.info(game.id)) } }
+            if (s.chars ?? 0) > 0 { Button("Show Text Read") { open(.readText(s.gameID, s.id)) } }
             Button("Delete Session") { lib.deleteSession(s) }.disabled(live)
         }
     }

@@ -56,6 +56,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let r = try? await VNDB.fetch(id: vid) { await Library.shared.addFromVNDB(r) }
             }
         }
+        if env["VNLIB_READ_TEXT"] != nil {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                MainActor.assumeIsolated {
+                    if let s = Library.shared.sessions.last {
+                        NotificationCenter.default.post(name: .openReadText, object: [s.gameID, s.id])
+                    }
+                }
+            }
+        }
         if let dev = env["VNLIB_DEVELOPER"] {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 MainActor.assumeIsolated { Library.shared.showDeveloper(name: dev, id: nil) }

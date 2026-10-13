@@ -144,6 +144,7 @@ struct InfoSheet: View {
                         Divider()
                         Button("Save Backups…") { open(.backups(id)) }
                         if (game.readChars ?? 0) > 0 {
+                            Button("Text Read…") { open(.readText(id, nil)) }
                             Button("Reset Characters Read") { lib.resetReading(id) }
                         }
                         if game.installed && lib.exists(game) {

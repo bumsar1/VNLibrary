@@ -53,6 +53,9 @@ struct ContentView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .addGames)) { _ in chooseGames() }
             .onReceive(NotificationCenter.default.publisher(for: .randomGame)) { _ in pickRandom() }
+            .onReceive(NotificationCenter.default.publisher(for: .openReadText)) { n in
+                if let ids = n.object as? [UUID], ids.count == 2 { mode = .activity; sheet = .readText(ids[0], ids[1]) }
+            }
             .onReceive(NotificationCenter.default.publisher(for: .showDeveloper)) { _ in
                 sheet = nil
                 mode = .discover
@@ -73,6 +76,7 @@ struct ContentView: View {
         case .wine(let g): WineTrySheet(game: g).environmentObject(lib)
         case .review(let y): YearReviewSheet(year: y, open: { sheet = $0 }).environmentObject(lib)
         case .backups(let id): BackupsSheet(id: id).environmentObject(lib)
+        case .readText(let g, let s): ReadTextSheet(game: g, session: s).environmentObject(lib)
         }
     }
 
@@ -838,13 +842,15 @@ struct SettingsSheet: View {
 extension Notification.Name {
     static let addGames = Notification.Name("VNLibraryAddGames")
     static let randomGame = Notification.Name("VNLibraryRandomGame")
+    static let openReadText = Notification.Name("VNLibraryOpenReadText")
     static let toggleCouch = Notification.Name("VNLibraryToggleCouch")
 }
 
 enum SheetKind: Identifiable {
-    case edit(Game), info(UUID), vndb(UUID), newCollection(UUID), discover(VNDB.Result), wine(Game), review(Int), backups(UUID)
+    case edit(Game), info(UUID), vndb(UUID), newCollection(UUID), discover(VNDB.Result), wine(Game), review(Int), backups(UUID), readText(UUID, UUID?)
     var id: String {
         switch self {
+        case .readText(let g, let s): return "read-\(g)-\(s?.uuidString ?? "all")"
         case .backups(let id): return "backups-\(id)"
         case .wine(let g): return "wine-\(g.id)"
         case .review(let y): return "review-\(y)"
