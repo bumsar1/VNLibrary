@@ -125,6 +125,19 @@ enum VNDB {
         return try JSONDecoder().decode(Response.self, from: data)
     }
 
+    /// A row of VNs for couch mode: the given conditions on top of the
+    /// user's Discover language/platform/length filters.
+    static func row(_ extra: [Any], sort: String, reverse: Bool, base: DiscoverFilters) async -> [Result] {
+        var b = base
+        b.released = .any
+        b.minRating = nil
+        b.tags = []
+        let filters = b.conditions + extra
+        var payload: [String: Any] = ["fields": fields, "results": 30, "sort": sort, "reverse": reverse]
+        if !filters.isEmpty { payload["filters"] = filters.count == 1 ? filters[0] : ["and"] + filters }
+        return (try? await post(payload).results) ?? []
+    }
+
     /// Which of these VNs have a release rated 18+.
     static func adultIDs(_ vids: [String]) async -> Set<String> {
         guard !vids.isEmpty else { return [] }

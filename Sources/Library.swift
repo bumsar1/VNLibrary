@@ -566,7 +566,9 @@ final class Library: ObservableObject {
 
     // MARK: Launching
 
-    func launch(_ game: Game) {
+    /// `fullScreen` puts the game's window into full screen once it appears
+    /// (used by couch mode).
+    func launch(_ game: Game, fullScreen: Bool = false) {
         guard running[game.id] == nil else { return }
         guard game.installed else {
             alert = "\(game.name) isn't installed yet. Right-click → Edit and choose its game folder or app."
@@ -586,6 +588,7 @@ final class Library: ObservableObject {
                     if let pid {
                         self.appPIDs[pid] = game.id
                         self.started(game.id)
+                        if fullScreen { FullScreen.request(pid: pid) }
                     } else {
                         self.alert = "Couldn't start \(game.name): \(message ?? "unknown error")"
                     }
@@ -596,14 +599,14 @@ final class Library: ObservableObject {
                 alert = "siglus_engine wasn't found:\n\(enginePath)\n\nSet the right path in Settings (the gear icon)."
                 return
             }
-            run(game, executable: enginePath, arguments: ["--project-dir", game.path])
+            run(game, executable: enginePath, arguments: ["--project-dir", game.path], fullScreen: fullScreen)
         case .command:
             let cmd = game.command.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !cmd.isEmpty else {
                 alert = "\(game.name) has no command yet. Right-click → Edit to set how the game starts."
                 return
             }
-            run(game, executable: "/bin/zsh", arguments: ["-lc", cmd])
+            run(game, executable: "/bin/zsh", arguments: ["-lc", cmd], fullScreen: fullScreen)
         }
     }
 
@@ -611,7 +614,7 @@ final class Library: ObservableObject {
         logsDir.appendingPathComponent("\(game.id.uuidString).log")
     }
 
-    private func run(_ game: Game, executable: String, arguments: [String]) {
+    private func run(_ game: Game, executable: String, arguments: [String], fullScreen: Bool = false) {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: executable)
         p.arguments = arguments
@@ -637,6 +640,7 @@ final class Library: ObservableObject {
             try p.run()
             processes[id] = p
             started(id)
+            if fullScreen { FullScreen.request(pid: p.processIdentifier) }
         } catch {
             alert = "Couldn't start \(game.name): \(error.localizedDescription)"
         }

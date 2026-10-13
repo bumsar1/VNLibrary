@@ -61,7 +61,7 @@ Or build it yourself (needs Xcode):
 - **Ready to play / Not installed** — the library is split into games you can launch right now and ones without a folder yet (added from Discover, or moved)
 - **Filter** — by status, collection, tag or installed, with removable filter chips; sort by last played, name, date added or your rating
 - **Random pick** — the dice button (⌘R) picks something from your Plan to play list
-- **Couch mode** — full-screen, console-style browsing with rows for Ready to play, Not installed and new Discover releases (add them to Plan to play from the sofa), a VNDB screenshot of the selected game as the background, and soft UI sounds. Arrow keys or a game controller (⌘⇧F)
+- **Couch mode** — full-screen, console-style browsing (⌘⇧F) with arrow keys or a game controller: rows for Continue playing, Ready to play and Not installed, plus VNDB categories (new releases, coming soon, highest rated, most popular, hidden gems, and picks based on your favourite tags) that you can add to Plan to play from the sofa. Search with an on-screen keyboard (ABC, hiragana, katakana). Games started here open in full screen. A VNDB screenshot of the selected game fills the background, with soft UI sounds
 - **Discreet mode** — one click (⌘⇧D) blurs every cover and hides adult games and sexual tags
 - **Search** — matches names, VNDB titles (incl. Japanese), developers and tags
 

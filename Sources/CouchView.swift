@@ -1,9 +1,10 @@
 import GameController
 import SwiftUI
 
-/// Full-screen browsing from the sofa, like a console: rows for what's ready
-/// to play, what isn't installed, and new releases from Discover. Arrow keys
-/// or a game controller move around; Return / A acts, Esc / B leaves.
+/// Full-screen browsing from the sofa, like a console: rows for your games
+/// and for VNDB categories, an on-screen keyboard for search, a screenshot
+/// backdrop and UI sounds. Arrow keys or a game controller; Return / A acts,
+/// Esc / B goes back, Y or / searches.
 struct CouchView: View {
     @EnvironmentObject var lib: Library
     let close: () -> Void
@@ -31,27 +32,60 @@ struct CouchView: View {
         let items: [Item]
     }
 
+    /// A VNDB category row: extra filter conditions and an order.
+    struct Category {
+        let id: String
+        let title: String
+        let conditions: [Any]
+        let sort: String
+        let reverse: Bool
+    }
+
+    enum Input { case left, right, up, down, accept, back, search, start, backspace, type(String) }
+
     @State private var row = 0
     @State private var cols: [String: Int] = [:]
-    @State private var discover: [VNDB.Result] = []
+    @State private var categories: [Category] = []
+    @State private var remote: [String: [VNDB.Result]] = [:]
     @State private var adultRemote: Set<String> = []
     @State private var backdrops: [String: String] = [:]    // VNDB id → screenshot URL
     @State private var toast: String?
     @State private var keyMonitor: Any?
     @State private var lastStick = Date.distantPast
+    @State private var keyboard = CouchKeyboard()
+    @State private var typing = false
+    @State private var query = ""                            // the committed search
+    @State private var searchResults: [VNDB.Result] = []
+
+    // MARK: Rows
 
     private var rows: [Row] {
         let games = lib.sorted(.recent, filter: "")
-        let ready = games.filter { lib.exists($0) }.map(Item.game)
+        let installed = games.filter { lib.exists($0) }
+        let playing = installed.filter { $0.status == .playing }.map(Item.game)
+        let ready = installed.filter { $0.status != .playing }.map(Item.game)
         let notReady = games.filter { !lib.exists($0) }.map(Item.game)
         let owned = Set(lib.games.compactMap { $0.vndb?.id })
-        let fresh = discover.filter { r in
-            !owned.contains(r.id) && !(lib.discreet && (adultRemote.contains(r.id) || !(r.info.eroTags ?? []).isEmpty))
-        }.map(Item.remote)
-        return [Row(id: "ready", title: "Ready to play", items: ready),
-                Row(id: "not", title: "Not installed", items: notReady),
-                Row(id: "discover", title: "Discover · new releases", items: fresh)]
-            .filter { !$0.items.isEmpty }
+
+        var out: [Row] = []
+        if !query.isEmpty {
+            let mine = lib.sorted(.name, filter: query).map(Item.game)
+            out.append(Row(id: "s-lib", title: "Your library · “\(query)”", items: mine))
+            out.append(Row(id: "s-vndb", title: "VNDB · “\(query)”", items: searchResults.filter(allowed).map(Item.remote)))
+        }
+        out += [Row(id: "playing", title: "Continue playing", items: playing),
+                Row(id: "ready", title: "Ready to play", items: ready),
+                Row(id: "not", title: "Not installed", items: notReady)]
+        for c in categories {
+            let items = (remote[c.id] ?? []).filter { !owned.contains($0.id) && allowed($0) }.map(Item.remote)
+            out.append(Row(id: c.id, title: c.title, items: items))
+        }
+        return out.filter { !$0.items.isEmpty }
+    }
+
+    /// Discreet mode leaves adult VNs out of the VNDB rows.
+    private func allowed(_ r: VNDB.Result) -> Bool {
+        !(lib.discreet && (adultRemote.contains(r.id) || !(r.info.eroTags ?? []).isEmpty))
     }
 
     private var current: Item? {
@@ -62,6 +96,8 @@ struct CouchView: View {
         return c >= 0 ? items[c] : nil
     }
 
+    // MARK: Body
+
     var body: some View {
         let list = rows
         ZStack {
@@ -71,10 +107,18 @@ struct CouchView: View {
             LinearGradient(colors: [.black.opacity(0.75), .clear], startPoint: .leading, endPoint: .center)
 
             VStack(alignment: .leading, spacing: 18) {
-                HStack {
+                HStack(spacing: 16) {
                     Text("VN Library").font(.system(size: 20, weight: .bold)).foregroundStyle(.white.opacity(0.85))
+                    Button { handle(.search) } label: {
+                        Label(query.isEmpty ? "Search" : "“\(query)”", systemImage: "magnifyingglass")
+                            .font(.system(size: 14, weight: .semibold))
+                            .padding(.horizontal, 12).padding(.vertical, 6)
+                            .background(Capsule().fill(Color.white.opacity(0.12)))
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.white.opacity(0.85))
                     Spacer()
-                    Text("↑ ↓  row     ← →  choose     ⏎ / Ⓐ  \(actionHint)     esc / Ⓑ  back")
+                    Text("↑↓←→ move    ⏎ / Ⓐ \(actionHint)    / or Ⓨ search    esc / Ⓑ \(query.isEmpty ? "back" : "clear search")")
                         .font(.system(size: 13))
                         .foregroundStyle(.white.opacity(0.6))
                 }
@@ -88,7 +132,7 @@ struct CouchView: View {
                             }
                         }
                     }
-                    .frame(maxHeight: 470)
+                    .frame(maxHeight: 480)
                     .onChange(of: row) { _, i in
                         if list.indices.contains(i) { withAnimation(.easeInOut(duration: 0.25)) { proxy.scrollTo(list[i].id, anchor: .top) } }
                     }
@@ -99,6 +143,15 @@ struct CouchView: View {
 
             if list.isEmpty {
                 Text("No games to show.").font(.title2).foregroundStyle(.white.opacity(0.7))
+            }
+            if typing {
+                Color.black.opacity(0.5).onTapGesture { handle(.back) }
+                CouchKeyboardView(keyboard: keyboard) { r, c in
+                    keyboard.row = r
+                    keyboard.col = c
+                    handle(.accept)
+                }
+                .transition(.scale(scale: 0.95).combined(with: .opacity))
             }
             if let toast {
                 VStack {
@@ -116,7 +169,14 @@ struct CouchView: View {
         .ignoresSafeArea()
         .onAppear(perform: start)
         .onDisappear(perform: stop)
-        .task { await loadDiscover() }
+        .task {
+            // Test hooks: open the keyboard with some text, or run a search.
+            let env = ProcessInfo.processInfo.environment
+            if let t = env["VNLIB_COUCH_TYPE"] { keyboard.text = t; keyboard.mode = .hiragana; typing = true }
+            if let q = env["VNLIB_COUCH_QUERY"] { keyboard.text = q; commitSearch() }
+            await loadCategories()
+            if let r = env["VNLIB_COUCH_ROW"].flatMap(Int.init) { row = r }
+        }
         .task(id: current?.id) { await loadBackdrop() }
     }
 
@@ -180,7 +240,7 @@ struct CouchView: View {
         }
     }
 
-    // MARK: Rows
+    // MARK: Row views
 
     private func rowView(_ r: Row, focused: Bool) -> some View {
         let col = min(cols[r.id] ?? 0, r.items.count - 1)
@@ -274,6 +334,7 @@ struct CouchView: View {
                     if let dev = r.developers.first?.name { Text(dev) }
                     if let rel = r.released { Text(rel) }
                     if let rt = r.rating { Text("★ " + String(format: "%.1f", rt / 10)) }
+                    if let m = r.length_minutes, m > 0 { Text("~\(max(1, m / 60)) h") }
                     Text("On VNDB").foregroundStyle(Color(hex: 0x60A5FA))
                 }
                 .font(.system(size: 16)).foregroundStyle(.white.opacity(0.8))
@@ -288,7 +349,136 @@ struct CouchView: View {
             .frame(maxWidth: 900, alignment: .leading)
     }
 
+    // MARK: Loading
+
+    /// The VNDB rows, all on top of the user's Discover language filters.
+    private func loadCategories() async {
+        guard categories.isEmpty else { return }
+        let f = DateFormatter()
+        f.dateFormat = "yyyy-MM-dd"
+        f.locale = Locale(identifier: "en_US_POSIX")
+        let today = f.string(from: Date())
+        var cats = [
+            Category(id: "new", title: "New releases", conditions: [["released", "<=", today]], sort: "released", reverse: true),
+            Category(id: "upcoming", title: "Coming soon", conditions: [["released", ">", today]], sort: "released", reverse: false),
+            Category(id: "top", title: "Highest rated", conditions: [["votecount", ">=", 100]], sort: "rating", reverse: true),
+            Category(id: "popular", title: "Most popular", conditions: [], sort: "votecount", reverse: true),
+            Category(id: "gems", title: "Hidden gems",
+                     conditions: [["rating", ">=", 78], ["votecount", ">=", 20], ["votecount", "<=", 250]], sort: "rating", reverse: true),
+        ]
+        if let tag = await favouriteTag() {
+            cats.append(Category(id: "rec", title: "Because you like \(tag.name)",
+                                 conditions: [["tag", "=", tag.id], ["votecount", ">=", 30]], sort: "rating", reverse: true))
+        }
+        categories = cats
+        let base = DiscoverFilters.load()
+        for c in cats {
+            let results = await VNDB.row(c.conditions, sort: c.sort, reverse: c.reverse, base: base)
+            remote[c.id] = results
+            adultRemote.formUnion(await VNDB.adultIDs(results.map(\.id)))
+        }
+    }
+
+    /// The most common tag among the games you liked or are into, leaving
+    /// out tags almost every VN has.
+    private func favouriteTag() async -> DiscoverFilters.TagRef? {
+        let generic: Set<String> = ["Male Protagonist", "ADV", "Multiple Endings", "Romance", "Slice of Life", "Protagonist with a Face",
+                                    "Protagonist with Voice Acting", "Comedy", "Drama", "High School", "Sprite Viewer", "Music Recollection",
+                                    "Normal Scene Recollection", "Achievements", "Insert Songs", "Branching Plot", "Few Choices",
+                                    "Only Virgin Heroines", "Heroine with Big Breasts", "Twitter", "Long Common Route"]
+        var counts: [String: Int] = [:]
+        for g in lib.games where (g.userRating ?? 0) >= 8 || g.status == .finished || g.status == .playing {
+            // Tags come most relevant first; weigh them that way, and count
+            // games you rated highly double.
+            let weight = (g.userRating ?? 0) >= 8 ? 2 : 1
+            for (i, t) in (g.vndb?.tags ?? []).enumerated() where !generic.contains(t) {
+                counts[t, default: 0] += max(1, 20 - i) * weight
+            }
+        }
+        guard let name = counts.max(by: { $0.value < $1.value })?.key else { return nil }
+        return await VNDB.searchTags(name).first { $0.0.name == name }?.0
+    }
+
+    private func runSearch() async {
+        let q = query
+        searchResults = (try? await VNDB.browse(q, sort: .relevance, page: 1, filters: {
+            var f = DiscoverFilters(); f.languages = []; return f
+        }()).results) ?? []
+        adultRemote.formUnion(await VNDB.adultIDs(searchResults.map(\.id)))
+    }
+
     // MARK: Actions
+
+    private func handle(_ input: Input) {
+        if typing { return handleKeyboard(input) }
+        switch input {
+        case .left: move(col: -1)
+        case .right: move(col: 1)
+        case .up: move(row: -1)
+        case .down: move(row: 1)
+        case .accept: act()
+        case .back:
+            if !query.isEmpty {
+                query = ""
+                searchResults = []
+                row = 0
+                CouchSounds.shared.play(.back)
+            } else {
+                CouchSounds.shared.play(.back)
+                close()
+            }
+        case .search, .start:
+            keyboard.text = query
+            withAnimation(.easeOut(duration: 0.15)) { typing = true }
+            CouchSounds.shared.play(.select)
+        case .type(let s):
+            // Typing straight away opens search with that letter.
+            keyboard.text = query + s
+            withAnimation(.easeOut(duration: 0.15)) { typing = true }
+        case .backspace: break
+        }
+    }
+
+    private func handleKeyboard(_ input: Input) {
+        func moved(_ ok: Bool) { CouchSounds.shared.play(ok ? .move : .error) }
+        switch input {
+        case .left: moved(keyboard.move(dx: -1, dy: 0))
+        case .right: moved(keyboard.move(dx: 1, dy: 0))
+        case .up: moved(keyboard.move(dx: 0, dy: -1))
+        case .down: moved(keyboard.move(dx: 0, dy: 1))
+        case .accept:
+            CouchSounds.shared.play(.row)
+            if keyboard.press() { commitSearch() }
+        case .back:
+            if keyboard.text.isEmpty {
+                withAnimation { typing = false }
+                CouchSounds.shared.play(.back)
+            } else {
+                _ = keyboard.press(.backspace)
+                CouchSounds.shared.play(.move)
+            }
+        case .backspace:
+            _ = keyboard.press(.backspace)
+        case .search:
+            _ = keyboard.press(.mode)
+            CouchSounds.shared.play(.row)
+        case .start:
+            commitSearch()
+        case .type(let s):
+            keyboard.text += s
+        }
+    }
+
+    private func commitSearch() {
+        let q = keyboard.text.trimmingCharacters(in: .whitespaces)
+        withAnimation { typing = false }
+        query = q
+        row = 0
+        searchResults = []
+        guard !q.isEmpty else { return }
+        CouchSounds.shared.play(.select)
+        Task { await runSearch() }
+    }
 
     private func move(col step: Int) {
         let r = rows
@@ -312,7 +502,7 @@ struct CouchView: View {
         case .game(let g):
             if lib.exists(g) {
                 CouchSounds.shared.play(.select)
-                lib.launch(g)
+                lib.launch(g, fullScreen: true)
                 show("Starting \(lib.displayName(g))…")
             } else {
                 CouchSounds.shared.play(.error)
@@ -337,31 +527,29 @@ struct CouchView: View {
         }
     }
 
-    private func leave() {
-        CouchSounds.shared.play(.back)
-        close()
-    }
-
-    private func loadDiscover() async {
-        guard discover.isEmpty,
-              let r = try? await VNDB.browse("", sort: .released, page: 1, filters: DiscoverFilters.load()) else { return }
-        discover = r.results
-        adultRemote = await VNDB.adultIDs(r.results.map(\.id))
-    }
-
     // MARK: Input
 
     private func start() {
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { e in
             switch e.keyCode {
-            case 123: move(col: -1); return nil          // ←
-            case 124: move(col: 1); return nil           // →
-            case 126: move(row: -1); return nil          // ↑
-            case 125: move(row: 1); return nil           // ↓
-            case 36, 76, 49: act(); return nil           // return, enter, space
-            case 53: leave(); return nil                 // esc
-            default: return e
+            case 123: handle(.left)
+            case 124: handle(.right)
+            case 126: handle(.up)
+            case 125: handle(.down)
+            case 36, 76: handle(typing ? .start : .accept)        // return, enter
+            case 53: handle(.back)                                // esc
+            case 51: handle(typing ? .backspace : .back)          // delete
+            case 48: handle(.search)                              // tab
+            default:
+                guard let chars = e.charactersIgnoringModifiers, !chars.isEmpty,
+                      !e.modifierFlags.contains(.command) else { return e }
+                if chars == "/" && !typing { handle(.search) }
+                else if chars == " " && !typing { handle(.accept) }
+                else if chars.unicodeScalars.allSatisfy({ !CharacterSet.controlCharacters.contains($0) }) {
+                    handle(.type(e.characters ?? chars))
+                } else { return e }
             }
+            return nil
         }
         NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { note in
             if let c = note.object as? GCController { MainActor.assumeIsolated { attach(c) } }
@@ -372,17 +560,20 @@ struct CouchView: View {
 
     private func attach(_ controller: GCController) {
         guard let pad = controller.extendedGamepad else { return }
-        pad.dpad.left.pressedChangedHandler = { _, _, p in if p { move(col: -1) } }
-        pad.dpad.right.pressedChangedHandler = { _, _, p in if p { move(col: 1) } }
-        pad.dpad.up.pressedChangedHandler = { _, _, p in if p { move(row: -1) } }
-        pad.dpad.down.pressedChangedHandler = { _, _, p in if p { move(row: 1) } }
-        pad.buttonA.pressedChangedHandler = { _, _, p in if p { act() } }
-        pad.buttonB.pressedChangedHandler = { _, _, p in if p { leave() } }
+        pad.dpad.left.pressedChangedHandler = { _, _, p in if p { handle(.left) } }
+        pad.dpad.right.pressedChangedHandler = { _, _, p in if p { handle(.right) } }
+        pad.dpad.up.pressedChangedHandler = { _, _, p in if p { handle(.up) } }
+        pad.dpad.down.pressedChangedHandler = { _, _, p in if p { handle(.down) } }
+        pad.buttonA.pressedChangedHandler = { _, _, p in if p { handle(.accept) } }
+        pad.buttonB.pressedChangedHandler = { _, _, p in if p { handle(.back) } }
+        pad.buttonY.pressedChangedHandler = { _, _, p in if p { handle(.search) } }
+        pad.buttonX.pressedChangedHandler = { _, _, p in if p { handle(.backspace) } }
+        pad.buttonMenu.pressedChangedHandler = { _, _, p in if p { handle(.start) } }
         pad.leftThumbstick.valueChangedHandler = { _, x, y in
             // The stick works like the d-pad, at most a step every 0.22 s.
             guard max(abs(x), abs(y)) > 0.6, Date().timeIntervalSince(lastStick) > 0.22 else { return }
             lastStick = Date()
-            if abs(x) > abs(y) { move(col: x > 0 ? 1 : -1) } else { move(row: y > 0 ? -1 : 1) }
+            if abs(x) > abs(y) { handle(x > 0 ? .right : .left) } else { handle(y > 0 ? .up : .down) }
         }
     }
 
@@ -392,7 +583,8 @@ struct CouchView: View {
         GCController.stopWirelessControllerDiscovery()
         for c in GCController.controllers() {
             guard let pad = c.extendedGamepad else { continue }
-            for b in [pad.dpad.left, pad.dpad.right, pad.dpad.up, pad.dpad.down, pad.buttonA, pad.buttonB] {
+            for b in [pad.dpad.left, pad.dpad.right, pad.dpad.up, pad.dpad.down,
+                      pad.buttonA, pad.buttonB, pad.buttonX, pad.buttonY, pad.buttonMenu] {
                 b.pressedChangedHandler = nil
             }
             pad.leftThumbstick.valueChangedHandler = nil
