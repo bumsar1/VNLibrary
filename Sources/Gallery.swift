@@ -142,6 +142,8 @@ struct GalleryViewer: View {
                         Spacer()
                         if blurred && !lib.discreet {
                             Button("Show Image") { lib.revealed.insert(img.url) }
+                        } else if lib.revealed.contains(img.url) && !lib.discreet {
+                            Button("Blur Again") { lib.revealed.remove(img.url) }
                         }
                         if let gameID {
                             Button("Use as Cover") {

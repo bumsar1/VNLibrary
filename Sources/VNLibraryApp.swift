@@ -27,6 +27,8 @@ struct VNLibraryApp: App {
             CommandGroup(after: .sidebar) {
                 Button("Discreet Mode") { Library.shared.discreet.toggle() }
                     .keyboardShortcut("d", modifiers: [.command, .shift])
+                Button("Blur Shown Images Again") { Library.shared.revealed.removeAll() }
+                    .keyboardShortcut("b", modifiers: [.command, .shift])
                 Button("Couch Mode") { NotificationCenter.default.post(name: .toggleCouch, object: nil) }
                     .keyboardShortcut("f", modifiers: [.command, .shift])
                 Button("Pick a Random Game") { NotificationCenter.default.post(name: .randomGame, object: nil) }
