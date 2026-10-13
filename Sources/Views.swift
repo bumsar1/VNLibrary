@@ -249,6 +249,7 @@ struct ContentView: View {
                 ForEach(SortOrder.allCases) { Text($0.label).tag($0) }
             }
             .pickerStyle(.inline)
+            .onChange(of: sort) { _, s in if s == .coverage { lib.refreshStaleJiten() } }
             Divider()
             Menu("Status") {
                 ForEach(PlayStatus.allCases) { st in
@@ -491,6 +492,7 @@ struct GameCard: View {
     let open: (SheetKind) -> Void
     @State private var hover = false
     @State private var coverDrop = false
+    @AppStorage("sort") private var sort: SortOrder = .recent
 
     private var isRunning: Bool { lib.running[game.id] != nil }
     private var missing: Bool { game.installed && !lib.exists(game) }
@@ -606,6 +608,11 @@ struct GameCard: View {
     private var subtitle: String {
         if isRunning { return "Running now" }
         if lib.fetching.contains(game.id) { return "Fetching from VNDB…" }
+        if sort == .coverage {
+            guard let j = game.jiten else { return "Not on jiten.moe" }
+            return j.coverage.map { String(format: "You know %.0f%% · difficulty %.1f", $0, j.difficulty) }
+                ?? String(format: "Difficulty %.1f/5", j.difficulty)
+        }
         let routes = lib.routeProgress(game).map { " · " + $0 } ?? ""
         guard game.lastPlayed != nil else { return Format.lastPlayed(nil) + routes }
         return "\(Format.lastPlayed(game.lastPlayed)) · \(Format.playtime(game.playSeconds))" + routes

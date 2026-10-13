@@ -52,7 +52,7 @@ struct Game: Codable, Identifiable, Equatable {
 }
 
 enum SortOrder: String, CaseIterable, Identifiable {
-    case recent, name, added, rating, size
+    case recent, name, added, rating, size, coverage
     var id: String { rawValue }
     var label: String {
         switch self {
@@ -61,6 +61,7 @@ enum SortOrder: String, CaseIterable, Identifiable {
         case .added: return "Recently added"
         case .rating: return "My rating"
         case .size: return "Size on disk"
+        case .coverage: return Jiten.key != nil ? "jiten.moe coverage" : "jiten.moe difficulty"
         }
     }
 }
@@ -267,6 +268,14 @@ final class Library: ObservableObject {
             return list.sorted { ($0.userRating ?? 0, $1.name) > ($1.userRating ?? 0, $0.name) }
         case .size:
             return list.sorted { ($0.sizeBytes ?? 0) > ($1.sizeBytes ?? 0) }
+        case .coverage:
+            // Most words known first; without a jiten.moe key, easiest first.
+            // Games jiten.moe doesn't have go last.
+            func key(_ g: Game) -> (Int, Double, Double) {
+                guard let j = g.jiten else { return (2, 0, 0) }
+                return j.coverage.map { (0, -$0, j.difficulty) } ?? (1, j.difficulty, 0)
+            }
+            return list.sorted { key($0) < key($1) }
         }
     }
 

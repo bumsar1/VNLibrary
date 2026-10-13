@@ -154,6 +154,12 @@ extension Library {
         save()
     }
 
+    /// Coverage grows as you learn words; refresh entries older than a day.
+    func refreshStaleJiten() {
+        let stale = games.filter { $0.vndb != nil && ($0.jiten.map { Date().timeIntervalSince($0.fetched) > 86_400 } ?? true) }
+        Task { for g in stale { await fetchJiten(g.id) } }
+    }
+
     func refreshJitenAll() {
         Task { for g in games where g.vndb != nil { await fetchJiten(g.id) } }
     }

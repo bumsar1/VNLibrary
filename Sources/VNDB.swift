@@ -72,7 +72,7 @@ enum VNDB {
             case .rating: return "Highest rated"
             case .votecount: return "Most popular"
             case .released: return "Newest"
-            case .easiest: return "Easiest (jiten.moe)"
+            case .easiest: return Jiten.key != nil ? "Highest coverage (jiten.moe)" : "Easiest (jiten.moe)"
             }
         }
     }
