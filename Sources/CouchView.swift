@@ -56,6 +56,7 @@ struct CouchView: View {
     @State private var typing = false
     @State private var query = ""                            // the committed search
     @State private var searchResults: [VNDB.Result] = []
+    @State private var producer: (name: String, items: [VNDB.Result])?   // "More from" a developer
     @State private var detail: Item?                         // the game page that's open
     @State private var detailState = CouchDetailState()
     @State private var rows: [Row] = []                      // rebuilt only when their inputs change
@@ -80,6 +81,11 @@ struct CouchView: View {
         let owned = Set(lib.games.compactMap { $0.vndb?.id })
 
         var out: [Row] = []
+        if let p = producer {
+            out.append(Row(id: "producer", title: "More from \(p.name)", items: p.items.filter(allowed).map { r in
+                lib.games.first { $0.vndb?.id == r.id }.map(Item.game) ?? .remote(r)
+            }))
+        }
         if !query.isEmpty {
             let mine = lib.sorted(.name, filter: query).map(Item.game)
             out.append(Row(id: "s-lib", title: "Your library · “\(query)”", items: mine))
@@ -120,6 +126,7 @@ struct CouchView: View {
             .onChange(of: lib.discreet) { _, _ in rebuildRows() }
             .onChange(of: query) { _, _ in rebuildRows() }
             .onChange(of: searchResults.map(\.id)) { _, _ in rebuildRows() }
+            .onChange(of: producer?.items.map(\.id)) { _, _ in rebuildRows() }
             .onChange(of: remote.mapValues { $0.count }) { _, _ in rebuildRows() }
             .onChange(of: adultRemote) { _, _ in if lib.discreet { rebuildRows() } }
     }
@@ -134,7 +141,10 @@ struct CouchView: View {
             if detail != nil { Color.black.opacity(0.4).transition(.opacity) }   // keeps the page readable
 
             if let detail {
-                CouchDetailView(item: detail, state: detailState)
+                CouchDetailView(item: detail, state: detailState, onPress: { b in
+                    if let i = Self.buttons(for: detail, lib: lib).firstIndex(of: b) { detailState.focusRow = 0; detailState.col = i }
+                    press(b, item: detail, delta: 1)
+                })
                     .transition(.opacity)
                 Text(detailHint)
                     .font(.system(size: 13)).foregroundStyle(.white.opacity(0.6))
@@ -214,6 +224,7 @@ struct CouchView: View {
             if let r = env["VNLIB_COUCH_ROW"].flatMap(Int.init) { row = r }
             if let c = env["VNLIB_COUCH_COL"].flatMap(Int.init), rows.indices.contains(row) { cols[rows[row].id] = c }
             if env["VNLIB_COUCH_OPEN"] != nil { act() }
+            if env["VNLIB_COUCH_OPEN"] == "developer", let d = detail { press(.developer, item: d, delta: 1) }
         }
         .task(id: shown?.id) { await loadBackdrop() }
     }
@@ -499,7 +510,11 @@ struct CouchView: View {
         case .down: move(row: 1)
         case .accept: act()
         case .back:
-            if !query.isEmpty {
+            if producer != nil {
+                producer = nil
+                row = 0
+                CouchSounds.shared.play(.back)
+            } else if !query.isEmpty {
                 query = ""
                 searchResults = []
                 row = 0
@@ -692,6 +707,10 @@ struct CouchView: View {
             let next = r + (game.userRating == nil ? 0 : delta)
             lib.setRating(game.id, next < 1 || next > 10 ? nil : next)
             CouchSounds.shared.play(next < 1 || next > 10 ? .back : .row)
+        case .developer:
+            guard let dev = Self.developer(of: item, lib: lib) else { return }
+            CouchSounds.shared.play(.select)
+            Task { await showProducer(dev.name, id: dev.id) }
         case .add:
             guard case .remote(let r) = item else { return }
             CouchSounds.shared.play(.add)
@@ -701,6 +720,32 @@ struct CouchView: View {
                 show("Added \(r.title) to Plan to play")
             }
         }
+    }
+
+    /// Closes the game page and puts a row of the developer's VNs, newest
+    /// first, at the top. Back removes it again.
+    private func showProducer(_ name: String, id: String?) async {
+        show("Loading \(name)…")
+        var pid = id ?? ""
+        if pid.isEmpty {
+            pid = await VNDB.searchProducers(name).first { $0.name == name || $0.name.hasPrefix(name + " (") }?.id ?? ""
+        }
+        guard !pid.isEmpty else { show("Couldn't find \(name) on VNDB"); CouchSounds.shared.play(.error); return }
+        var f = DiscoverFilters()
+        f.languages = []
+        f.developer = DiscoverFilters.TagRef(id: pid, name: name)
+        let results = (try? await VNDB.browse("", sort: .released, page: 1, filters: f).results) ?? []
+        guard !results.isEmpty else { show("No VNs from \(name) on VNDB"); return }
+        adultRemote.formUnion(await VNDB.adultIDs(results.map(\.id)))
+        withAnimation(.easeInOut(duration: 0.2)) {
+            detail = nil
+            producer = (name, results)
+            query = ""
+            searchResults = []
+            row = 0
+            cols["producer"] = 0
+        }
+        toast = nil
     }
 
     private func show(_ text: String) {

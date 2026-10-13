@@ -3,7 +3,7 @@ import SwiftUI
 /// Couch mode's game page: everything about one VN, with controller-driven
 /// buttons (play, status, rating, add) and a screenshot gallery.
 struct CouchDetailState {
-    enum Button: Hashable { case play, status, rating, add }
+    enum Button: Hashable { case play, status, rating, add, developer }
     var focusRow = 0            // 0 = buttons, 1 = gallery
     var col = 0
     var images: [GalleryImage] = []
@@ -12,10 +12,26 @@ struct CouchDetailState {
 
 extension CouchView {
     static func buttons(for item: Item, lib: Library) -> [CouchDetailState.Button] {
+        var out: [CouchDetailState.Button]
         switch item {
-        case .game(let g): return lib.exists(g) ? [.play, .status, .rating] : [.status, .rating]
-        case .remote(let r): return lib.games.contains { $0.vndb?.id == r.id } ? [] : [.add]
+        case .game(let g): out = lib.exists(g) ? [.play, .status, .rating] : [.status, .rating]
+        case .remote(let r): out = lib.games.contains { $0.vndb?.id == r.id } ? [] : [.add]
         }
+        if developer(of: item, lib: lib) != nil { out.append(.developer) }
+        return out
+    }
+
+    /// The first developer of the VN, with its VNDB producer id when known.
+    static func developer(of item: Item, lib: Library) -> (name: String, id: String?)? {
+        let info: VNInfo? = {
+            switch item {
+            case .game(let g): return (lib.games.first { $0.id == g.id } ?? g).vndb
+            case .remote(let r): return lib.games.first { $0.vndb?.id == r.id }?.vndb ?? r.info
+            }
+        }()
+        guard let name = info?.developers.first, !name.isEmpty else { return nil }
+        let id = info?.developerIDs?.first.flatMap { $0.isEmpty ? nil : $0 }
+        return (name, id)
     }
 }
 
@@ -23,6 +39,7 @@ struct CouchDetailView: View {
     @EnvironmentObject var lib: Library
     let item: CouchView.Item
     let state: CouchDetailState
+    var onPress: (CouchDetailState.Button) -> Void = { _ in }
 
     /// The library entry, live (status and rating change while the page is open).
     private var game: Game? {
@@ -52,11 +69,17 @@ struct CouchDetailView: View {
                     if let sub = subtitle {
                         Text(sub).font(.system(size: 18)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
                     }
-                    HStack(spacing: 10) {
+                    WrapLayout(spacing: 10) {
                         ForEach(facts, id: \.self) { f in
-                            Text(f).font(.system(size: 14, weight: .medium)).foregroundStyle(.white.opacity(0.9))
+                            let isDev = f == CouchView.developer(of: item, lib: lib)?.name
+                            Label(f, systemImage: isDev ? "building.2" : "").labelStyle(FactLabelStyle(icon: isDev))
+                                .font(.system(size: 14, weight: .medium)).foregroundStyle(.white.opacity(0.9))
+                                .lineLimit(1).fixedSize()
                                 .padding(.horizontal, 10).padding(.vertical, 5)
-                                .background(Capsule().fill(Color.white.opacity(0.12)))
+                                .background(Capsule().fill(Color.white.opacity(isDev ? 0.2 : 0.12)))
+                                .contentShape(Capsule())
+                                .onTapGesture { if isDev { onPress(.developer) } }
+                                .help(isDev ? "See more from \(f)" : "")
                         }
                     }
                     if let j = game?.jiten {
@@ -80,11 +103,13 @@ struct CouchDetailView: View {
                         Text(tags.prefix(10).joined(separator: " · "))
                             .font(.system(size: 13)).foregroundStyle(.white.opacity(0.5)).lineLimit(2)
                     }
-                    HStack(spacing: 14) {
+                    WrapLayout(spacing: 14) {
                         ForEach(Array(buttons.enumerated()), id: \.offset) { i, b in
                             buttonView(b, focused: state.focusRow == 0 && state.col == i)
+                                .contentShape(Rectangle())
+                                .onTapGesture { onPress(b) }
                         }
-                        if buttons.isEmpty {
+                        if !buttons.contains(where: { $0 != .developer }) {
                             Label("In your library", systemImage: "checkmark.circle.fill")
                                 .font(.system(size: 17, weight: .semibold)).foregroundStyle(Color.kDone)
                         }
@@ -166,10 +191,12 @@ struct CouchDetailView: View {
             case .status: return (game?.status.map { "Status: \($0.label)" } ?? "Set status", game?.status?.symbol ?? "bookmark")
             case .rating: return (game?.userRating.map { "My rating: \($0)" } ?? "Rate it", "star.fill")
             case .add: return ("Add to Plan to Play", "bookmark.fill")
+            case .developer: return ("More from \(CouchView.developer(of: item, lib: lib)?.name ?? "the developer")", "building.2")
             }
         }()
         return Label(label, systemImage: symbol)
             .font(.system(size: 18, weight: .semibold))
+            .lineLimit(1).fixedSize()
             .foregroundStyle(focused ? .black : .white)
             .padding(.horizontal, 22).padding(.vertical, 13)
             .background(RoundedRectangle(cornerRadius: 12).fill(focused ? Color.white : Color.white.opacity(b == .play || b == .add ? 0.22 : 0.1)))
@@ -222,5 +249,16 @@ struct CouchDetailView: View {
         }
         .padding(.horizontal, -60)
         .padding(.bottom, -36)
+    }
+}
+
+/// A fact capsule; only the developer's carries an icon.
+private struct FactLabelStyle: LabelStyle {
+    let icon: Bool
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 5) {
+            if icon { configuration.icon.font(.system(size: 11)) }
+            configuration.title
+        }
     }
 }
