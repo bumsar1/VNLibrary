@@ -28,16 +28,26 @@ struct Game: Codable, Identifiable, Equatable {
     var vndb: VNInfo?
     var blurCover: Bool?          // optional so older library files still decode
     var isBlurred: Bool { blurCover ?? false }
+    // The user's own tracking (all optional for the same reason).
+    var status: PlayStatus?
+    var userRating: Int?          // 1–10
+    var notes: String?
+    var collections: [String]?
+    var started: Date?
+    var finished: Date?
+    var adult: Bool?              // nil = decide from VNDB's sexual-content tags
+    var isAdult: Bool { adult ?? !(vndb?.eroTags ?? []).isEmpty }
 }
 
 enum SortOrder: String, CaseIterable, Identifiable {
-    case recent, name, added
+    case recent, name, added, rating
     var id: String { rawValue }
     var label: String {
         switch self {
         case .recent: return "Recently played"
         case .name: return "Name"
         case .added: return "Recently added"
+        case .rating: return "My rating"
         }
     }
 }
@@ -58,6 +68,17 @@ final class Library: ObservableObject {
     @Published var fetching: Set<UUID> = []
     @Published var showEroTags: Bool {
         didSet { UserDefaults.standard.set(showEroTags, forKey: "showEroTags") }
+    }
+    /// Discreet mode: every cover blurred, sexual tags and adult games hidden.
+    @Published var discreet: Bool {
+        didSet { UserDefaults.standard.set(discreet, forKey: "discreet") }
+    }
+    var syncTasks: [UUID: Task<Void, Never>] = [:]
+    @Published var vndbUser: String? {
+        didSet { UserDefaults.standard.set(vndbUser, forKey: "vndbUser") }
+    }
+    @Published var vndbUsername: String? {
+        didSet { UserDefaults.standard.set(vndbUsername, forKey: "vndbUsername") }
     }
 
     static let defaultEngine = "~/siglus_rs/target/release/siglus_engine"
@@ -93,6 +114,9 @@ final class Library: ObservableObject {
         siglusEngine = UserDefaults.standard.string(forKey: "siglusEngine") ?? Self.defaultEngine
         autoVNDB = UserDefaults.standard.object(forKey: "autoVNDB") as? Bool ?? true
         showEroTags = UserDefaults.standard.object(forKey: "showEroTags") as? Bool ?? true
+        discreet = UserDefaults.standard.bool(forKey: "discreet")
+        vndbUser = UserDefaults.standard.string(forKey: "vndbUser")
+        vndbUsername = UserDefaults.standard.string(forKey: "vndbUsername")
         load()
         loadSessions()
         if ProcessInfo.processInfo.environment["VNLIB_NO_VNDB"] == nil {
@@ -130,10 +154,13 @@ final class Library: ObservableObject {
         }
     }
 
-    func sorted(_ order: SortOrder, filter: String, tag: String? = nil) -> [Game] {
+    func sorted(_ order: SortOrder, filter: String, tag: String? = nil,
+                status: PlayStatus? = nil, collection: String? = nil) -> [Game] {
         let q = filter.trimmingCharacters(in: .whitespaces)
-        var list = games
+        var list = visibleGames
         if let tag { list = list.filter { tags(of: $0).contains(tag) } }
+        if let status { list = list.filter { $0.status == status } }
+        if let collection { list = list.filter { $0.collections?.contains(collection) ?? false } }
         if !q.isEmpty {
             // Search covers the name, VNDB titles, developers and tags.
             list = list.filter { g in
@@ -149,13 +176,15 @@ final class Library: ObservableObject {
             return list.sorted { $0.added > $1.added }
         case .recent:
             return list.sorted { ($0.lastPlayed ?? $0.added) > ($1.lastPlayed ?? $1.added) }
+        case .rating:
+            return list.sorted { ($0.userRating ?? 0, $1.name) > ($1.userRating ?? 0, $0.name) }
         }
     }
 
     /// The tags shown for a game, including sexual-content tags when enabled.
     func tags(of game: Game) -> [String] {
         guard let info = game.vndb else { return [] }
-        return info.tags + (showEroTags ? info.eroTags ?? [] : [])
+        return info.tags + (showEroTags && !discreet ? info.eroTags ?? [] : [])
     }
 
     func isEroTag(_ tag: String, of game: Game) -> Bool {
@@ -546,6 +575,7 @@ final class Library: ObservableObject {
             save()
         }
         beginSession(id)
+        markPlayingIfNew(id)
     }
 
     private func finished(_ id: UUID, status: Int32, log: URL?) {

@@ -40,8 +40,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleName</key>             <string>VN Library</string>
     <key>CFBundleDisplayName</key>      <string>VN Library</string>
     <key>CFBundleIdentifier</key>       <string>dk.cadesign.vnlibrary</string>
-    <key>CFBundleVersion</key>          <string>1.2</string>
-    <key>CFBundleShortVersionString</key><string>1.2</string>
+    <key>CFBundleVersion</key>          <string>1.3</string>
+    <key>CFBundleShortVersionString</key><string>1.3</string>
     <key>CFBundlePackageType</key>      <string>APPL</string>
     <key>CFBundleExecutable</key>       <string>VNLibrary</string>
     <key>CFBundleIconFile</key>         <string>AppIcon</string>
@@ -63,7 +63,14 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 PLIST
 
 echo "→ Signing and clearing quarantine..."
-codesign --force --sign - "$APP" >/dev/null 2>&1 || echo "  (codesign skipped)"
+# A stable identity keeps the keychain from asking again for the VNDB token
+# after every rebuild (an ad-hoc signature changes with each build). Reuses
+# Keiko's self-signed certificate when it's there.
+if security find-identity -p codesigning 2>/dev/null | grep -q "Keiko Dev"; then
+    codesign --force --sign "Keiko Dev" "$APP" >/dev/null 2>&1 || echo "  (signing failed)"
+else
+    codesign --force --sign - "$APP" >/dev/null 2>&1 || echo "  (codesign skipped)"
+fi
 xattr -cr "$APP"
 
 echo ""

@@ -24,6 +24,15 @@ struct VNLibraryApp: App {
                 Button("Fetch Missing from VNDB") { Library.shared.fetchMissingVNDB() }
                 Button("Update VNDB Data (Tags etc.)") { Library.shared.refreshVNDB() }
             }
+            CommandGroup(after: .sidebar) {
+                Button("Discreet Mode") { Library.shared.discreet.toggle() }
+                    .keyboardShortcut("d", modifiers: [.command, .shift])
+                Button("Couch Mode") { NotificationCenter.default.post(name: .toggleCouch, object: nil) }
+                    .keyboardShortcut("f", modifiers: [.command, .shift])
+                Button("Pick a Random Game") { NotificationCenter.default.post(name: .randomGame, object: nil) }
+                    .keyboardShortcut("r", modifiers: .command)
+                Divider()
+            }
         }
     }
 }

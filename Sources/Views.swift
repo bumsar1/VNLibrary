@@ -27,6 +27,9 @@ struct ContentView: View {
     @AppStorage("sort") private var sort: SortOrder = .recent
     @State private var search = ""
     @State private var tag: String?
+    @State private var status: PlayStatus?
+    @State private var collection: String?
+    @State private var couch = false
     @State private var sheet: SheetKind?
     @State private var showSettings = false
     @State private var dropping = false
@@ -35,8 +38,51 @@ struct ContentView: View {
     enum Mode: String, CaseIterable { case library = "Library", activity = "Activity" }
 
     var body: some View {
+        mainColumn
+            .sheet(item: $sheet) { kind in sheetView(kind) }
+            .sheet(isPresented: $showSettings) {
+                SettingsSheet().environmentObject(lib)
+            }
+            .alert("VN Library", isPresented: Binding(
+                get: { lib.alert != nil }, set: { if !$0 { lib.alert = nil } })
+            ) {
+                Button("OK") { lib.alert = nil }
+            } message: {
+                Text(lib.alert ?? "")
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .addGames)) { _ in chooseGames() }
+            .onReceive(NotificationCenter.default.publisher(for: .randomGame)) { _ in pickRandom() }
+            .onReceive(NotificationCenter.default.publisher(for: .toggleCouch)) { _ in setCouch(!couch) }
+            .task { await testHooks() }
+    }
+
+    @ViewBuilder
+    private func sheetView(_ kind: SheetKind) -> some View {
+        switch kind {
+        case .edit(let game): EditSheet(game: game).environmentObject(lib)
+        case .info(let id):
+            InfoSheet(id: id, open: { sheet = $0 }, filterTag: { tag = $0; mode = .library }).environmentObject(lib)
+        case .vndb(let id): VNDBSheet(id: id).environmentObject(lib)
+        case .newCollection(let id): NewCollectionSheet(id: id).environmentObject(lib)
+        }
+    }
+
+    private func testHooks() async {
+        let env = ProcessInfo.processInfo.environment
+        if env["VNLIB_MODE"] == "activity" { mode = .activity }
+        if env["VNLIB_MODE"] == "couch" { couch = true }
+        if env["VNLIB_MODE"] == "settings" { showSettings = true }
+        // Open the first game's info page after VNDB has answered.
+        if env["VNLIB_OPEN_INFO"] != nil {
+            try? await Task.sleep(for: .seconds(2.5))
+            if let first = lib.games.first { sheet = .info(first.id) }
+        }
+    }
+
+    private var mainColumn: some View {
         VStack(spacing: 0) {
             header
+            if mode == .library && (tag != nil || status != nil || collection != nil) { filterChips }
             if mode == .activity {
                 ActivityView(open: { sheet = $0 })
             } else if lib.games.isEmpty {
@@ -46,6 +92,12 @@ struct ContentView: View {
             }
         }
         .background(Color.kBackground)
+        .overlay {
+            if couch {
+                CouchView(close: { setCouch(false) }).environmentObject(lib)
+                    .transition(.opacity)
+            }
+        }
         .overlay {
             if dropping {
                 RoundedRectangle(cornerRadius: 14)
@@ -58,32 +110,23 @@ struct ContentView: View {
             loadFileURLs(providers) { add($0) }
             return true
         }
-        .sheet(item: $sheet) { kind in
-            switch kind {
-            case .edit(let game): EditSheet(game: game).environmentObject(lib)
-            case .info(let id):
-                InfoSheet(id: id, open: { sheet = $0 }, filterTag: { tag = $0; mode = .library }).environmentObject(lib)
-            case .vndb(let id): VNDBSheet(id: id).environmentObject(lib)
-            }
+    }
+
+    private func pickRandom() {
+        guard let g = lib.randomPick() else {
+            lib.alert = "Nothing to pick from. Mark some games as “Plan to play” first."
+            return
         }
-        .sheet(isPresented: $showSettings) {
-            SettingsSheet().environmentObject(lib)
-        }
-        .alert("VN Library", isPresented: Binding(
-            get: { lib.alert != nil }, set: { if !$0 { lib.alert = nil } })
-        ) {
-            Button("OK") { lib.alert = nil }
-        } message: {
-            Text(lib.alert ?? "")
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .addGames)) { _ in chooseGames() }
-        .task {
-            if ProcessInfo.processInfo.environment["VNLIB_MODE"] == "activity" { mode = .activity }
-            // Test hook: open the first game's info page after VNDB has answered.
-            if ProcessInfo.processInfo.environment["VNLIB_OPEN_INFO"] != nil {
-                try? await Task.sleep(for: .seconds(2.5))
-                if let first = lib.games.first { sheet = .info(first.id) }
-            }
+        mode = .library
+        sheet = .info(g.id)
+    }
+
+    /// Couch mode takes the window full screen and leaves it again on exit.
+    private func setCouch(_ on: Bool) {
+        withAnimation(.easeInOut(duration: 0.25)) { couch = on }
+        if let w = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }),
+           w.styleMask.contains(.fullScreen) != on {
+            w.toggleFullScreen(nil)
         }
     }
 
@@ -110,7 +153,8 @@ struct ContentView: View {
                 Text("VN Library")
                     .font(.system(size: 22, weight: .bold))
                     .foregroundStyle(Color.kText)
-                Text(lib.games.count == 1 ? "1 game" : "\(lib.games.count) games")
+                let count = lib.visibleGames.count
+                Text(count == 1 ? "1 game" : "\(count) games")
                     .font(.system(size: 12))
                     .foregroundStyle(Color.kMuted)
             }
@@ -122,7 +166,14 @@ struct ContentView: View {
             .frame(width: 180)
             .padding(.leading, 14)
             Spacer()
-            if mode == .library { libraryControls }
+            if mode == .library {
+                libraryControls
+                IconButton(symbol: "dice", help: "Pick a random game to play (⌘R)") { pickRandom() }
+                IconButton(symbol: "tv", help: "Couch mode (⌘⇧F)") { setCouch(true) }
+            }
+            IconButton(symbol: lib.discreet ? "eye.slash.fill" : "eye",
+                       help: lib.discreet ? "Discreet mode is on (⌘⇧D)" : "Discreet mode (⌘⇧D)",
+                       active: lib.discreet) { lib.discreet.toggle() }
             IconButton(symbol: "plus", help: "Add games (⌘O)") { chooseGames() }
             IconButton(symbol: "gearshape", help: "Settings") { showSettings = true }
         }
@@ -138,51 +189,76 @@ struct ContentView: View {
                 TextField("Search", text: $search)
                     .textFieldStyle(.plain)
                     .foregroundStyle(Color.kText)
-                    .frame(width: 160)
+                    .frame(width: 140)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(RoundedRectangle(cornerRadius: 8).fill(Color.kPanel2))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.kLine))
 
-            tagMenu
-
-            Picker("", selection: $sort) {
-                ForEach(SortOrder.allCases) { Text($0.label).tag($0) }
-            }
-            .labelsHidden()
-            .frame(width: 150)
+            filterMenu
     }
 
-    private var tagMenu: some View {
+    private var activeFilters: Int { [tag != nil, status != nil, collection != nil].filter { $0 }.count }
+
+    private var filterMenu: some View {
         Menu {
-            if tag != nil {
-                Button("Show all games") { tag = nil }
+            Picker("Sort by", selection: $sort) {
+                ForEach(SortOrder.allCases) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.inline)
+            Divider()
+            Menu("Status") {
+                ForEach(PlayStatus.allCases) { st in
+                    Toggle(st.label, isOn: Binding(get: { status == st }, set: { status = $0 ? st : nil }))
+                }
+            }
+            Menu("Collection") {
+                let all = lib.allCollections
+                if all.isEmpty { Text("No collections yet. Right-click a game → Collections.") }
+                ForEach(all, id: \.self) { c in
+                    Toggle(c, isOn: Binding(get: { collection == c }, set: { collection = $0 ? c : nil }))
+                }
+            }
+            Menu("Tag") {
+                let tags = lib.allTags
+                if tags.isEmpty { Text("No tags yet. Fetch data from VNDB first.") }
+                ForEach(tags, id: \.name) { t in
+                    Toggle("\(t.name)  (\(t.count))", isOn: Binding(get: { tag == t.name }, set: { tag = $0 ? t.name : nil }))
+                }
+            }
+            if activeFilters > 0 {
                 Divider()
-            }
-            let tags = lib.allTags
-            if tags.isEmpty {
-                Text("No tags yet. Fetch data from VNDB first.")
-            }
-            ForEach(tags, id: \.name) { t in
-                Button("\(t.name)  (\(t.count))") { tag = t.name }
+                Button("Clear Filters") { tag = nil; status = nil; collection = nil }
             }
         } label: {
-            Label(tag ?? "Tags", systemImage: tag == nil ? "tag" : "tag.fill")
+            Label(activeFilters > 0 ? "Filter (\(activeFilters))" : "Filter",
+                  systemImage: "line.3.horizontal.decrease.circle")
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(RoundedRectangle(cornerRadius: 8).fill(tag == nil ? Color.kPanel2 : Color.kAccent.opacity(0.35)))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(tag == nil ? Color.kLine : Color.kAccent))
-        .help("Filter by VNDB tag")
+        .background(RoundedRectangle(cornerRadius: 8).fill(activeFilters > 0 ? Color.kAccent.opacity(0.35) : Color.kPanel2))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(activeFilters > 0 ? Color.kAccent : Color.kLine))
+        .help("Sort and filter by status, collection or VNDB tag")
+    }
+
+    private var filterChips: some View {
+        HStack(spacing: 8) {
+            if let status { FilterChip(text: status.label, symbol: status.symbol) { self.status = nil } }
+            if let collection { FilterChip(text: collection, symbol: "folder") { self.collection = nil } }
+            if let tag { FilterChip(text: tag, symbol: "tag") { self.tag = nil } }
+            Spacer()
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 14)
     }
 
     private var grid: some View {
         ScrollView {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 170, maximum: 230), spacing: 22, alignment: .top)], spacing: 26) {
-                ForEach(lib.sorted(sort, filter: search, tag: tag)) { game in
+                ForEach(lib.sorted(sort, filter: search, tag: tag, status: status, collection: collection)) { game in
                     GameCard(game: game, open: { sheet = $0 })
                 }
             }
@@ -190,7 +266,7 @@ struct ContentView: View {
             .padding(.bottom, 28)
         }
         .overlay {
-            if lib.sorted(sort, filter: search, tag: tag).isEmpty {
+            if lib.sorted(sort, filter: search, tag: tag, status: status, collection: collection).isEmpty {
                 Text("No games match.")
                     .foregroundStyle(Color.kMuted)
             }
@@ -219,9 +295,32 @@ struct ContentView: View {
     }
 }
 
+struct FilterChip: View {
+    let text: String
+    let symbol: String
+    let remove: () -> Void
+    var body: some View {
+        Button(action: remove) {
+            HStack(spacing: 6) {
+                Image(systemName: symbol)
+                Text(text)
+                Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
+            }
+            .font(.system(size: 12))
+            .foregroundStyle(Color.white)
+            .padding(.horizontal, 10).padding(.vertical, 4)
+            .background(Capsule().fill(Color.kAccent.opacity(0.35)))
+            .overlay(Capsule().strokeBorder(Color.kAccent))
+        }
+        .buttonStyle(.plain)
+        .help("Remove filter")
+    }
+}
+
 struct IconButton: View {
     let symbol: String
     let help: String
+    var active = false
     let action: () -> Void
     @State private var hover = false
     var body: some View {
@@ -230,8 +329,9 @@ struct IconButton: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(Color.kText)
                 .frame(width: 32, height: 30)
-                .background(RoundedRectangle(cornerRadius: 8).fill(hover ? Color.kLine : Color.kPanel2))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.kLine))
+                .background(RoundedRectangle(cornerRadius: 8)
+                    .fill(active ? Color.kAccent.opacity(0.35) : hover ? Color.kLine : Color.kPanel2))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(active ? Color.kAccent : Color.kLine))
         }
         .buttonStyle(.plain)
         .help(help)
@@ -258,9 +358,10 @@ struct CoverView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                if let img = game.isBlurred ? lib.blurredImage(for: game) : lib.image(for: game) {
+                let hidden = game.isBlurred || lib.discreet
+                if let img = hidden ? lib.blurredImage(for: game) : lib.image(for: game) {
                     artwork(img, geo.size)
-                    if game.isBlurred {
+                    if hidden {
                         Color.black.opacity(0.25)
                         VStack(spacing: 10) {
                             Image(systemName: "eye.slash").font(.system(size: 24))
@@ -323,6 +424,16 @@ struct GameCard: View {
         VStack(alignment: .leading, spacing: 8) {
             ZStack {
                 CoverView(game: game)
+                if let st = game.status {
+                    VStack {
+                        HStack {
+                            StatusBadge(status: st, rating: game.userRating)
+                            Spacer()
+                        }
+                        Spacer()
+                    }
+                    .padding(8)
+                }
                 if hover || isRunning {
                     Color.black.opacity(isRunning ? 0.45 : 0.3)
                     if isRunning {
@@ -397,6 +508,8 @@ struct GameCard: View {
             Button("Choose Cover…") { chooseCover() }
             Button("Find Cover Automatically") { lib.setCover(game.id, from: nil) }
             Button(game.isBlurred ? "Show Cover" : "Blur Cover") { lib.toggleBlur(game.id) }
+            Divider()
+            TrackingMenus(game: game, open: open)
             Divider()
             Button("Show in Finder") {
                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: game.path)])
@@ -529,38 +642,49 @@ struct SettingsSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 0) {
             Text("Settings")
                 .font(.system(size: 18, weight: .bold))
+                .padding([.horizontal, .top], 22)
             Form {
-                HStack {
-                    TextField("siglus_engine", text: $lib.siglusEngine)
-                        .font(.system(size: 12, design: .monospaced))
-                    Button("Choose…") { choose() }
+                Section {
+                    HStack {
+                        TextField("siglus_engine", text: $lib.siglusEngine)
+                            .font(.system(size: 12, design: .monospaced))
+                        Button("Choose…") { choose() }
+                    }
+                    Label(lib.engineFound ? "Found" : "Not found at that path",
+                          systemImage: lib.engineFound ? "checkmark.circle.fill" : "xmark.circle.fill")
+                        .foregroundStyle(lib.engineFound ? Color.kDone : Color.kHinomaru)
+                } header: {
+                    Text("Siglus engine")
+                } footer: {
+                    Text("Used for every Siglus game (Key games like Summer Pockets, Clannad, …).")
                 }
-                Label(lib.engineFound ? "Found" : "Not found at that path",
-                      systemImage: lib.engineFound ? "checkmark.circle.fill" : "xmark.circle.fill")
-                    .foregroundStyle(lib.engineFound ? Color.kDone : Color.kHinomaru)
-            }
-            .formStyle(.grouped)
-            Text("Used for every Siglus game (Key games like Summer Pockets, Clannad, …).")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-            Form {
-                Toggle("Fetch cover and info from VNDB when a game is added", isOn: $lib.autoVNDB)
-                Toggle("Show sexual-content tags (pink)", isOn: $lib.showEroTags)
+                Section("VNDB data") {
+                    Toggle("Fetch cover and info from VNDB when a game is added", isOn: $lib.autoVNDB)
+                    Toggle("Show sexual-content tags (pink)", isOn: $lib.showEroTags)
+                }
+                Section {
+                    Toggle("Discreet mode", isOn: $lib.discreet)
+                } header: {
+                    Text("Privacy")
+                } footer: {
+                    Text("Blurs every cover and hides adult games and sexual tags. Toggle it any time with ⌘⇧D or the eye button.")
+                }
+                VNDBAccountSection().environmentObject(lib)
             }
             .formStyle(.grouped)
             HStack {
                 Button("Open Library Folder") { NSWorkspace.shared.open(lib.supportDir) }
+                Button("Reset Engine Path") { lib.siglusEngine = Library.defaultEngine }
                 Spacer()
-                Button("Reset") { lib.siglusEngine = Library.defaultEngine }
                 Button("Done") { dismiss() }
                     .keyboardShortcut(.defaultAction)
             }
+            .padding([.horizontal, .bottom], 22)
         }
-        .padding(22)
-        .frame(width: 520)
+        .frame(width: 560, height: 640)
     }
 
     private func choose() {
@@ -574,15 +698,73 @@ struct SettingsSheet: View {
 
 extension Notification.Name {
     static let addGames = Notification.Name("VNLibraryAddGames")
+    static let randomGame = Notification.Name("VNLibraryRandomGame")
+    static let toggleCouch = Notification.Name("VNLibraryToggleCouch")
 }
 
 enum SheetKind: Identifiable {
-    case edit(Game), info(UUID), vndb(UUID)
+    case edit(Game), info(UUID), vndb(UUID), newCollection(UUID)
     var id: String {
         switch self {
+        case .newCollection(let id): return "collection-\(id)"
         case .edit(let g): return "edit-\(g.id)"
         case .info(let id): return "info-\(id)"
         case .vndb(let id): return "vndb-\(id)"
+        }
+    }
+}
+
+/// Connect a VNDB account so status, rating and notes sync to the user's list.
+/// A Section, meant to sit inside the settings form.
+struct VNDBAccountSection: View {
+    @EnvironmentObject var lib: Library
+    @State private var token = ""
+    @State private var working = false
+    @State private var message: String?
+
+    var body: some View {
+            Section("VNDB list sync") {
+                if let name = lib.vndbUsername, lib.vndbSyncEnabled {
+                    LabeledContent("Connected as") {
+                        Text(name).foregroundStyle(Color.kDone)
+                    }
+                    Text("Status, rating, notes and dates are sent to your VNDB list when you change them.")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                    HStack {
+                        Button("Import from VNDB") { run { await lib.importFromVNDB() } }
+                        Button("Send All to VNDB") { run { await lib.exportToVNDB() } }
+                        Spacer()
+                        Button("Disconnect", role: .destructive) { lib.disconnectVNDB(); message = nil }
+                    }
+                    .disabled(working)
+                } else {
+                    SecureField("API token", text: $token)
+                    Text("Create a token on vndb.org under your profile → Applications, with “Access to my list” and “Write to my list” ticked. It's stored in the macOS keychain.")
+                        .font(.system(size: 11)).foregroundStyle(.secondary)
+                    HStack {
+                        Button("Open vndb.org") { NSWorkspace.shared.open(URL(string: "https://vndb.org/u/tokens")!) }
+                        Spacer()
+                        Button("Connect") {
+                            run {
+                                do { return "Connected as \(try await lib.connectVNDB(token: token))." }
+                                catch { return error.localizedDescription }
+                            }
+                        }
+                        .disabled(token.trimmingCharacters(in: .whitespaces).isEmpty || working)
+                    }
+                }
+                if working { ProgressView().controlSize(.small) }
+                if let message { Text(message).font(.system(size: 11)) }
+            }
+    }
+
+    private func run(_ job: @escaping () async -> String) {
+        working = true
+        message = nil
+        Task {
+            message = await job()
+            working = false
+            token = ""
         }
     }
 }

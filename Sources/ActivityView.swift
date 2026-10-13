@@ -49,7 +49,7 @@ struct ActivityView: View {
 
     private func topGames() -> [(game: Game, seconds: Double)] {
         let since = cal.date(byAdding: .day, value: -30, to: Date())!
-        return lib.games
+        return lib.visibleGames
             .map { ($0, lib.seconds(since: since, game: $0.id)) }
             .filter { $0.1 >= 60 }
             .sorted { $0.1 > $1.1 }
@@ -89,7 +89,10 @@ struct ActivityView: View {
 
     private var sessionLog: some View {
         var byDay: [Date: [PlaySession]] = [:]
-        for s in lib.sessions { byDay[cal.startOfDay(for: s.start), default: []].append(s) }
+        let hidden = Set(lib.games.filter { lib.discreet && $0.isAdult }.map(\.id))
+        for s in lib.sessions where !hidden.contains(s.gameID) {
+            byDay[cal.startOfDay(for: s.start), default: []].append(s)
+        }
         var days = byDay.keys.sorted(by: >)
         if let selectedDay { days = days.filter { $0 == selectedDay } }
         let limited = !showAllDays && selectedDay == nil && days.count > 14
@@ -318,6 +321,8 @@ extension Format {
         return dayFormatter.string(from: date)
     }
     static func time(_ date: Date) -> String { timeFormatter.string(from: date) }
+    private static let dateFormatter = formatter("d MMM yyyy")
+    static func date(_ date: Date) -> String { dateFormatter.string(from: date) }
     static func month(_ date: Date) -> String { monthFormatter.string(from: date) }
 
     /// Compact total for tiles: "45 min", "3.5 h", "120 h".

@@ -8,6 +8,7 @@ struct InfoSheet: View {
     let id: UUID
     let open: (SheetKind) -> Void
     let filterTag: (String) -> Void
+    @State private var notes = ""
 
     var body: some View {
         if let game = lib.games.first(where: { $0.id == id }) {
@@ -20,11 +21,15 @@ struct InfoSheet: View {
     private func content(_ game: Game) -> some View {
         let info = game.vndb
         return HStack(alignment: .top, spacing: 24) {
-            CoverView(game: game)
-                .aspectRatio(3.0 / 4.0, contentMode: .fit)
-                .frame(width: 240)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.kLine))
+            VStack(alignment: .leading, spacing: 10) {
+                CoverView(game: game)
+                    .aspectRatio(3.0 / 4.0, contentMode: .fit)
+                    .frame(width: 240)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.kLine))
+                trackingControls(game)
+            }
+            .frame(width: 240)
 
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -41,11 +46,11 @@ struct InfoSheet: View {
 
                 FlowChips(items: facts(game))
 
-                if let info {
-                    // Description first, tags below it, all in one scroll area so a
-                    // long tag list never pushes the text off the page.
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 14) {
+                // Description, tags and notes share one scroll area so a long
+                // tag list never pushes the rest off the page.
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 14) {
+                        if let info {
                             Text(info.description ?? "No description on VNDB.")
                                 .font(.system(size: 13))
                                 .foregroundStyle(Color.kText.opacity(0.9))
@@ -66,21 +71,31 @@ struct InfoSheet: View {
                                 }
                                 .help("Click a tag to show every game that has it")
                             }
+                        } else {
+                            Text(lib.fetching.contains(id) ? "Fetching from VNDB…" : "No VNDB data yet.")
+                                .font(.system(size: 13))
+                                .foregroundStyle(Color.kMuted)
+                            if !lib.fetching.contains(id) {
+                                Button("Find on VNDB…") { open(.vndb(id)) }
+                            }
                         }
-                        .padding(.trailing, 8)
-                    }
-                    .frame(maxHeight: .infinity)
-                } else {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(lib.fetching.contains(id) ? "Fetching from VNDB…" : "No VNDB data yet.")
-                            .font(.system(size: 13))
+                        Text("MY NOTES")
+                            .font(.system(size: 10, weight: .semibold))
                             .foregroundStyle(Color.kMuted)
-                        if !lib.fetching.contains(id) {
-                            Button("Find on VNDB…") { open(.vndb(id)) }
-                        }
+                        TextEditor(text: $notes)
+                            .font(.system(size: 13))
+                            .scrollContentBackground(.hidden)
+                            .padding(6)
+                            .frame(minHeight: 80)
+                            .background(RoundedRectangle(cornerRadius: 8).fill(Color.kPanel2))
+                            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.kLine))
+                            .onChange(of: notes) { _, new in
+                                if new != (game.notes ?? "") { lib.setNotes(id, new) }
+                            }
                     }
-                    Spacer()
+                    .padding(.trailing, 8)
                 }
+                .frame(maxHeight: .infinity)
 
                 HStack {
                     Button {
@@ -98,6 +113,15 @@ struct InfoSheet: View {
                         if let info { Button("Open on vndb.org") { NSWorkspace.shared.open(info.url) } }
                         Button("Edit…") { open(.edit(game)) }
                         Button(game.isBlurred ? "Show Cover" : "Blur Cover") { lib.toggleBlur(id) }
+                        Menu("Collections") {
+                            ForEach(lib.allCollections, id: \.self) { c in
+                                Toggle(c, isOn: Binding(get: { game.collections?.contains(c) ?? false },
+                                                        set: { _ in lib.toggleCollection(id, c) }))
+                            }
+                            if !lib.allCollections.isEmpty { Divider() }
+                            Button("New Collection…") { open(.newCollection(id)) }
+                        }
+                        Toggle("Adult Game", isOn: Binding(get: { game.isAdult }, set: { lib.setAdult(id, $0) }))
                         Button("Show in Finder") {
                             NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: game.path)])
                         }
@@ -113,8 +137,40 @@ struct InfoSheet: View {
             }
         }
         .padding(24)
-        .frame(width: 760, height: 440)
+        .frame(width: 780, height: 540)
         .background(Color.kPanel)
+        .onAppear { notes = game.notes ?? "" }
+    }
+
+    private func trackingControls(_ game: Game) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Picker("Status", selection: Binding(get: { game.status }, set: { lib.setStatus(id, $0) })) {
+                Text("No status").tag(PlayStatus?.none)
+                Divider()
+                ForEach(PlayStatus.allCases) { st in
+                    Label(st.label, systemImage: st.symbol).tag(PlayStatus?.some(st))
+                }
+            }
+            Picker("Rating", selection: Binding(get: { game.userRating }, set: { lib.setRating(id, $0) })) {
+                Text("Not rated").tag(Int?.none)
+                Divider()
+                ForEach((1...10).reversed(), id: \.self) { r in
+                    Text("\(r) – \(ratingWord(r))").tag(Int?.some(r))
+                }
+            }
+            if let c = game.collections, !c.isEmpty {
+                Label(c.joined(separator: ", "), systemImage: "folder")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.kMuted)
+                    .lineLimit(2)
+            }
+            if let s = game.started {
+                Text(game.finished.map { "Played \(Format.date(s)) – \(Format.date($0))" } ?? "Started \(Format.date(s))")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.kMuted)
+            }
+        }
+        .font(.system(size: 12))
     }
 
     private func facts(_ game: Game) -> [String] {
@@ -206,7 +262,7 @@ struct WrapLayout: Layout {
 struct FlowChips: View {
     let items: [String]
     var body: some View {
-        HStack(spacing: 6) {
+        WrapLayout(spacing: 6) {
             ForEach(items, id: \.self) { item in
                 Chip { Text(item).foregroundStyle(Color.kText).lineLimit(1) }
             }

@@ -46,6 +46,13 @@ Or build it yourself (needs Xcode):
 - **Blur cover** — per game, from the right-click menu. Covers VNDB flags as suggestive are blurred automatically. The pixels themselves are blurred, so nothing shows through
 - **Activity tracker** — every session is logged with its day, start and end time and length. The Activity tab shows today / week / month / all-time totals, your streak, a year-long heatmap of the days you played (click a day to see its sessions), your top games and the full session log. Idle time (no input for 10 minutes) doesn't count
 - **Progress** — play time against VNDB's estimated length on each game's page
+- **Status, rating and notes** — Playing / Finished / On hold / Dropped / Plan to play, your own 1–10 rating and notes per game. Starting a game marks it as Playing
+- **VNDB list sync** — connect your VNDB account (API token, kept in the keychain) and status, rating, notes and dates are sent to your list as you change them; import your existing list in one click
+- **Collections** — your own groups, e.g. "Key games"
+- **Filter** — by status, collection or tag, with removable filter chips; sort by last played, name, date added or your rating
+- **Random pick** — the dice button (⌘R) picks something from your Plan to play list
+- **Couch mode** — full-screen browsing with big covers, driven by the arrow keys or a game controller (⌘⇧F)
+- **Discreet mode** — one click (⌘⇧D) blurs every cover and hides adult games and sexual tags
 - **Search** — matches names, VNDB titles (incl. Japanese), developers and tags
 
 <p align="center">
@@ -54,6 +61,10 @@ Or build it yourself (needs Xcode):
 
 <p align="center">
   <img src="docs/activity.png" alt="Activity tracker">
+</p>
+
+<p align="center">
+  <img src="docs/couch.png" alt="Couch mode">
 </p>
 
 ## Launching games
