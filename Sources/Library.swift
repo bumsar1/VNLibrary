@@ -89,6 +89,9 @@ final class Library: ObservableObject {
     }
     var syncTasks: [UUID: Task<Void, Never>] = [:]
     /// Blur VNDB images flagged as suggestive (in Discover and galleries).
+    @Published var autoCouch: Bool = UserDefaults.standard.object(forKey: "autoCouch") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(autoCouch, forKey: "autoCouch") }
+    }
     @Published var blurSuggestive: Bool {
         didSet { UserDefaults.standard.set(blurSuggestive, forKey: "blurSuggestive") }
     }

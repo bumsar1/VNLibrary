@@ -1,4 +1,5 @@
 import AppKit
+import GameController
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -51,6 +52,7 @@ struct ContentView: View {
             } message: {
                 Text(lib.alert ?? "")
             }
+            .onReceive(NotificationCenter.default.publisher(for: .GCControllerDidConnect)) { _ in autoCouch() }
             .onReceive(NotificationCenter.default.publisher(for: .addGames)) { _ in chooseGames() }
             .onReceive(NotificationCenter.default.publisher(for: .randomGame)) { _ in pickRandom() }
             .onReceive(NotificationCenter.default.publisher(for: .openReadText)) { n in
@@ -93,8 +95,18 @@ struct ContentView: View {
         }
     }
 
+    /// A controller turning up (at launch or later) opens couch mode, unless
+    /// that's switched off or a game is running.
+    private func autoCouch() {
+        guard lib.autoCouch, !couch, lib.running.isEmpty, !GCController.controllers().isEmpty else { return }
+        sheet = nil
+        showSettings = false
+        couch = true
+    }
+
     private func testHooks() async {
         let env = ProcessInfo.processInfo.environment
+        autoCouch()
         if env["VNLIB_MODE"] == "activity" { mode = .activity }
         if env["VNLIB_MODE"] == "couch" { couch = true }
         if env["VNLIB_MODE"] == "settings" { showSettings = true }
@@ -835,6 +847,7 @@ struct SettingsSheet: View {
                     }
                 }
                 Section("Couch mode") {
+                    Toggle("Open couch mode when a controller is connected", isOn: $lib.autoCouch)
                     Toggle("Sounds when moving around and selecting", isOn: Binding(
                         get: { UserDefaults.standard.object(forKey: "couchSounds") as? Bool ?? true },
                         set: { UserDefaults.standard.set($0, forKey: "couchSounds"); if $0 { CouchSounds.shared.play(.select) } }))
