@@ -65,6 +65,7 @@ struct InfoSheet: View {
                 // tag list never pushes the rest off the page.
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
+                        LeftOffView(lines: lib.lastLines(id))
                         if let vid = info?.id {
                             GalleryStrip(vid: vid, viewing: $viewing, images: $gallery)
                         }
@@ -145,6 +146,7 @@ struct InfoSheet: View {
                         Button("Save Backups…") { open(.backups(id)) }
                         if (game.readChars ?? 0) > 0 {
                             Button("Text Read…") { open(.readText(id, nil)) }
+                            Button("Kanji Met…") { open(.kanji(id)) }
                             Button("Reset Characters Read") { lib.resetReading(id) }
                         }
                         if game.installed && lib.exists(game) {

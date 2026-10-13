@@ -13,18 +13,24 @@ struct ActivityView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 tiles
-                if lib.weeklyGoal > 0 {
-                    HStack(spacing: 12) {
+                HStack(spacing: 12) {
+                    if lib.weeklyGoal > 0 {
                         GoalTile(seconds: lib.seconds(since: cal.dateInterval(of: .weekOfYear, for: Date())!.start),
                                  goalHours: lib.weeklyGoal)
-                        reviewButton
                     }
-                } else {
-                    reviewButton
+                    if lib.dailyCharGoal > 0 {
+                        CharGoalTile(chars: lib.charsToday(), goal: lib.dailyCharGoal)
+                    }
+                    VStack(alignment: .leading, spacing: 8) {
+                        reviewButton
+                        kanjiButton
+                    }
+                    if lib.weeklyGoal == 0 && lib.dailyCharGoal == 0 { Spacer() }
                 }
                 section("Last 12 months") {
                     Heatmap(totals: lib.dayTotals(), selected: $selectedDay)
                 }
+                ReadingSpeedSection()
                 let top = topGames()
                 if !top.isEmpty {
                     section("Top games · last 30 days") { topList(top) }
@@ -61,6 +67,17 @@ struct ActivityView: View {
             open(.review(cal.component(.year, from: Date())))
         } label: {
             Label("\(String(cal.component(.year, from: Date()))) in Review", systemImage: "sparkles")
+                .font(.system(size: 13, weight: .semibold))
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.kPanel))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.kLine))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var kanjiButton: some View {
+        Button { open(.kanji(nil)) } label: {
+            Label("Kanji you've met", systemImage: "character.ja")
                 .font(.system(size: 13, weight: .semibold))
                 .padding(.horizontal, 14).padding(.vertical, 10)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Color.kPanel))

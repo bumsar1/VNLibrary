@@ -64,6 +64,14 @@ struct CouchDetailView: View {
                                     Count.short(j.characters), j.difficulty, j.difficultyLabel, Count.short(j.uniqueWords)))
                             .font(.system(size: 13)).foregroundStyle(.white.opacity(0.6))
                     }
+                    if let g = game, !lib.lastLines(g.id).isEmpty {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("WHERE YOU LEFT OFF").font(.system(size: 11, weight: .bold)).foregroundStyle(.white.opacity(0.5))
+                            ForEach(Array(lib.lastLines(g.id).enumerated()), id: \.offset) { _, l in
+                                Text(l).font(.system(size: 15)).foregroundStyle(.white.opacity(0.85)).lineLimit(1)
+                            }
+                        }
+                    }
                     Text(description)
                         .font(.system(size: 16)).foregroundStyle(.white.opacity(0.85)).lineSpacing(3)
                         .lineLimit(5)

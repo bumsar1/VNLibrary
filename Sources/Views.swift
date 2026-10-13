@@ -62,6 +62,18 @@ struct ContentView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .toggleCouch)) { _ in setCouch(!couch) }
             .task { await testHooks() }
+            .confirmationDialog(finishTitle, isPresented: Binding(get: { lib.finishPrompt != nil },
+                                                                  set: { if !$0 && lib.finishPrompt != nil { lib.answerFinishPrompt(false) } })) {
+                Button("Mark as Finished") { lib.answerFinishPrompt(true) }
+                Button("Not Yet", role: .cancel) { lib.answerFinishPrompt(false) }
+            } message: {
+                Text("All its routes are ticked, or you've read nearly all of its text.")
+            }
+    }
+
+    private var finishTitle: String {
+        let g = lib.finishPrompt.flatMap { id in lib.games.first { $0.id == id } }
+        return "Finished \(g.map(lib.displayName) ?? "this game")?"
     }
 
     @ViewBuilder
@@ -77,6 +89,7 @@ struct ContentView: View {
         case .review(let y): YearReviewSheet(year: y, open: { sheet = $0 }).environmentObject(lib)
         case .backups(let id): BackupsSheet(id: id).environmentObject(lib)
         case .readText(let g, let s): ReadTextSheet(game: g, session: s).environmentObject(lib)
+        case .kanji(let g): KanjiSheet(game: g).environmentObject(lib)
         }
     }
 
@@ -86,6 +99,7 @@ struct ContentView: View {
         if env["VNLIB_MODE"] == "couch" { couch = true }
         if env["VNLIB_MODE"] == "settings" { showSettings = true }
         if env["VNLIB_MODE"] == "discover" { mode = .discover }
+        if env["VNLIB_MODE"] == "kanji" { mode = .activity; sheet = .kanji(nil) }
         if env["VNLIB_MODE"] == "review" { mode = .activity; sheet = .review(Library.calendar.component(.year, from: Date())) }
         if env["VNLIB_MODE"] == "wine", let g = lib.games.first(where: { $0.kind == .siglus }) { sheet = .wine(g) }
         // Open the first game's info page after VNDB has answered.
@@ -809,6 +823,9 @@ struct SettingsSheet: View {
                     Stepper(value: $lib.weeklyGoal, in: 0...80, step: 1) {
                         Text(lib.weeklyGoal == 0 ? "Weekly play goal: off" : "Weekly play goal: \(Int(lib.weeklyGoal)) hours")
                     }
+                    Stepper(value: $lib.dailyCharGoal, in: 0...200_000, step: 2_500) {
+                        Text(lib.dailyCharGoal == 0 ? "Daily reading goal: off" : "Daily reading goal: \(lib.dailyCharGoal.formatted()) characters")
+                    }
                 }
                 Section("Couch mode") {
                     Toggle("Sounds when moving around and selecting", isOn: Binding(
@@ -854,9 +871,10 @@ extension Notification.Name {
 }
 
 enum SheetKind: Identifiable {
-    case edit(Game), info(UUID), vndb(UUID), newCollection(UUID), discover(VNDB.Result), wine(Game), review(Int), backups(UUID), readText(UUID, UUID?)
+    case edit(Game), info(UUID), vndb(UUID), newCollection(UUID), discover(VNDB.Result), wine(Game), review(Int), backups(UUID), readText(UUID, UUID?), kanji(UUID?)
     var id: String {
         switch self {
+        case .kanji(let g): return "kanji-\(g?.uuidString ?? "all")"
         case .readText(let g, let s): return "read-\(g)-\(s?.uuidString ?? "all")"
         case .backups(let id): return "backups-\(id)"
         case .wine(let g): return "wine-\(g.id)"

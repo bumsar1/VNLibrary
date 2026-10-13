@@ -62,6 +62,10 @@ Or build it yourself (needs Xcode):
 - **Disk usage** — size of each game, sort by size, and *Move Game Files to Trash* that keeps the game (status, notes, play time) as Not installed
 - **Easiest for you** — jiten.moe's VNs sorted by how much of the vocabulary you know (with an API key) or by difficulty, in Discover and couch mode
 - **Characters read** — counts the Japanese text you actually read, from what [Meikipop](https://github.com/bumsar1/Meikipop-Mac) recognises on screen while you play. Every line counts once per game: text that types itself out counts when finished, re-reads and the backlog don't count again, and OCR slips of a character or two are caught. Shown per game (with % of the whole text from jiten.moe), per session (with characters per hour), and per week. Click a session's character count to read back the text it counted, search it, and take lines off the count: *Delete* (it can count again if it shows up later) or *Blacklist* (that exact sentence never counts again in this game — for menus and UI text; undo under Blacklist). A built-in, editable list of common VN menu words (セーブ, ロード, オート, SAVE, LOAD …) never counts in any game, nor do lines without Japanese in them
+- **Where you left off** — the last lines you read, on the game page and in couch mode
+- **Reading speed** — characters per hour week by week and by time of day, plus an optional daily reading goal in characters
+- **Kanji you've met** — every kanji in the text you've read, counted, and checked against your WaniKani progress (taught, passed, not taught yet, not in WaniKani)
+- **Finished?** — when all routes are ticked or ~90% of the text is read, VN Library offers to mark the game finished
 - **Status, rating and notes** — Playing / Finished / On hold / Dropped / Plan to play, your own 1–10 rating and notes per game. Starting a game marks it as Playing
 - **VNDB list sync** — connect your VNDB account (API token, kept in the keychain) and status, rating, notes and dates are sent to your list as you change them; import your existing list in one click
 - **Collections** — your own groups, e.g. "Key games"

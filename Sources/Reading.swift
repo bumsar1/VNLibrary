@@ -213,6 +213,34 @@ extension Library {
         if let i = games.firstIndex(where: { $0.id == game }) { games[i].readChars = (games[i].readChars ?? 0) + chars }
         let sid = sessions[session].id
         appendReadLines(lines.map { ReadLine(session: sid, t: $0.t, text: $0.raw, chars: $0.chars) }, game: game)
+        lastLinesCache[game] = Array(((lastLinesCache[game] ?? lastLines(game)) + lines.map(\.raw)).suffix(3))
+        checkFinished(game)
+    }
+
+    /// The last few lines read in a game, for "where you left off".
+    func lastLines(_ game: UUID) -> [String] {
+        if let c = lastLinesCache[game] { return c }
+        let l = Array(readLines(game: game).suffix(3).map(\.text))
+        lastLinesCache[game] = l
+        return l
+    }
+
+    /// Offers to mark a game finished once all its routes are ticked or about
+    /// 90% of its text (by jiten.moe's count) has been read. Asked once.
+    func checkFinished(_ id: UUID) {
+        guard finishPrompt == nil, let g = games.first(where: { $0.id == id }),
+              g.status != .finished, g.finishAsked != true else { return }
+        let routesDone = (g.routes?.isEmpty == false) && g.routes!.allSatisfy { g.routesDone?.contains($0.id) ?? false }
+        let mostlyRead = (g.jiten?.characters ?? 0) > 0 && Double(g.readChars ?? 0) >= 0.9 * Double(g.jiten!.characters)
+        if routesDone || mostlyRead { finishPrompt = id }
+    }
+
+    func answerFinishPrompt(_ finished: Bool) {
+        guard let id = finishPrompt, let i = games.firstIndex(where: { $0.id == id }) else { finishPrompt = nil; return }
+        finishPrompt = nil
+        games[i].finishAsked = true
+        save()
+        if finished { setStatus(id, .finished) }
     }
 
     // MARK: Text kept for reviewing
@@ -275,6 +303,7 @@ extension Library {
         if let i = games.firstIndex(where: { $0.id == game }) {
             games[i].readChars = max(0, (games[i].readChars ?? 0) - gone.reduce(0) { $0 + $1.chars })
         }
+        lastLinesCache[game] = nil
         let keep = all.filter { !ids.contains($0.id) }
         var data = Data()
         for l in keep { if let d = try? JSONEncoder().encode(l) { data.append(d); data.append(0x0A) } }
@@ -305,6 +334,7 @@ extension Library {
 
     func resetReading(_ id: UUID) {
         readTrackers[id] = nil
+        lastLinesCache[id] = nil
         try? FileManager.default.removeItem(at: seenFile(id))
         try? FileManager.default.removeItem(at: linesFile(id))
         if let i = games.firstIndex(where: { $0.id == id }) { games[i].readChars = nil }

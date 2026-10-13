@@ -45,6 +45,7 @@ struct Game: Codable, Identifiable, Equatable {
     var saveFolder: String?       // set by hand when it isn't found automatically
     var sizeBytes: Int64?
     var readChars: Int?           // characters read, from Meikipop's text log
+    var finishAsked: Bool?        // "mark as finished?" was offered once
     var isAdult: Bool { adult ?? !(vndb?.eroTags ?? []).isEmpty }
     /// Added from Discover without a game folder or app yet.
     var installed: Bool { !path.isEmpty }
@@ -113,6 +114,13 @@ final class Library: ObservableObject {
     /// Companion apps VN Library started, per running game, so only those get closed.
     var launchedCompanions: [UUID: [NSRunningApplication]] = [:]
     var readTrackers: [UUID: ReadTracker] = [:]
+    var lastLinesCache: [UUID: [String]] = [:]
+    /// A game that looks finished (all routes, or ~all of its text read): offer to mark it.
+    @Published var finishPrompt: UUID?
+    /// Daily reading goal in characters; 0 turns it off.
+    @Published var dailyCharGoal: Int {
+        didSet { UserDefaults.standard.set(dailyCharGoal, forKey: "dailyCharGoal") }
+    }
     @Published var engineUpdate: EngineUpdate.Status = .unknown
     @Published var vndbUser: String? {
         didSet { UserDefaults.standard.set(vndbUser, forKey: "vndbUser") }
@@ -158,6 +166,7 @@ final class Library: ObservableObject {
         blurSuggestive = UserDefaults.standard.object(forKey: "blurSuggestive") as? Bool ?? true
         japaneseTitles = UserDefaults.standard.bool(forKey: "japaneseTitles")
         weeklyGoal = UserDefaults.standard.object(forKey: "weeklyGoal") as? Double ?? 0
+        _dailyCharGoal = Published(initialValue: Int(ProcessInfo.processInfo.environment["VNLIB_CHAR_GOAL"] ?? "") ?? UserDefaults.standard.integer(forKey: "dailyCharGoal"))
         globalCompanions = UserDefaults.standard.stringArray(forKey: "globalCompanions") ?? []
         // Set through the wrapper so didSet doesn't run here: it would save the
         // value and scan the folder before the library is loaded, and the

@@ -373,7 +373,11 @@ struct CouchView: View {
                     if !lib.exists(g) { Text("Not installed").foregroundStyle(Color.kFlame) }
                 }
                 .font(.system(size: 16)).foregroundStyle(.white.opacity(0.8))
-                if let d = g.vndb?.description { blurb(d) }
+                if let last = lib.lastLines(g.id).last {
+                    // Where you left off, instead of the blurb, for games you've been reading.
+                    Text("Last read: \(last)").font(.system(size: 15)).italic()
+                        .foregroundStyle(.white.opacity(0.8)).lineLimit(2).frame(maxWidth: 900, alignment: .leading)
+                } else if let d = g.vndb?.description { blurb(d) }
             case .remote(let r):
                 Text(lib.japaneseTitles ? (r.alttitle ?? r.title) : r.title)
                     .font(.system(size: 40, weight: .bold)).foregroundStyle(.white).lineLimit(2)

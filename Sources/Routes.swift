@@ -67,6 +67,7 @@ extension Library {
         if let k = done.firstIndex(of: route) { done.remove(at: k) } else { done.append(route) }
         games[i].routesDone = done
         save()
+        checkFinished(id)
     }
 
     func addRoute(_ id: UUID, name: String) {
