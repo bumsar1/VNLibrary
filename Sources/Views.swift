@@ -35,7 +35,7 @@ struct ContentView: View {
     @State private var dropping = false
     @State private var mode: Mode = .library
 
-    enum Mode: String, CaseIterable { case library = "Library", activity = "Activity" }
+    enum Mode: String, CaseIterable { case library = "Library", discover = "Discover", activity = "Activity" }
 
     var body: some View {
         mainColumn
@@ -64,6 +64,7 @@ struct ContentView: View {
             InfoSheet(id: id, open: { sheet = $0 }, filterTag: { tag = $0; mode = .library }).environmentObject(lib)
         case .vndb(let id): VNDBSheet(id: id).environmentObject(lib)
         case .newCollection(let id): NewCollectionSheet(id: id).environmentObject(lib)
+        case .discover(let r): DiscoverSheet(result: r, open: { sheet = $0 }).environmentObject(lib)
         }
     }
 
@@ -72,6 +73,7 @@ struct ContentView: View {
         if env["VNLIB_MODE"] == "activity" { mode = .activity }
         if env["VNLIB_MODE"] == "couch" { couch = true }
         if env["VNLIB_MODE"] == "settings" { showSettings = true }
+        if env["VNLIB_MODE"] == "discover" { mode = .discover }
         // Open the first game's info page after VNDB has answered.
         if env["VNLIB_OPEN_INFO"] != nil {
             try? await Task.sleep(for: .seconds(2.5))
@@ -85,6 +87,8 @@ struct ContentView: View {
             if mode == .library && (tag != nil || status != nil || collection != nil) { filterChips }
             if mode == .activity {
                 ActivityView(open: { sheet = $0 })
+            } else if mode == .discover {
+                DiscoverView(open: { sheet = $0 })
             } else if lib.games.isEmpty {
                 emptyState
             } else {
@@ -163,7 +167,7 @@ struct ContentView: View {
             }
             .pickerStyle(.segmented)
             .labelsHidden()
-            .frame(width: 180)
+            .frame(width: 260)
             .padding(.leading, 14)
             Spacer()
             if mode == .library {
@@ -418,7 +422,7 @@ struct GameCard: View {
     @State private var coverDrop = false
 
     private var isRunning: Bool { lib.running[game.id] != nil }
-    private var missing: Bool { !lib.exists(game) }
+    private var missing: Bool { game.installed && !lib.exists(game) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -462,13 +466,14 @@ struct GameCard: View {
                         .buttonStyle(.plain)
                     }
                 }
-                if missing {
+                if missing || !game.installed {
                     VStack {
                         Spacer()
-                        Label("Folder missing", systemImage: "exclamationmark.triangle.fill")
+                        Label(missing ? "Folder missing" : "Not installed",
+                              systemImage: missing ? "exclamationmark.triangle.fill" : "arrow.down.circle")
                             .font(.system(size: 11, weight: .semibold))
                             .padding(.horizontal, 8).padding(.vertical, 4)
-                            .background(Capsule().fill(Color.kHinomaru))
+                            .background(Capsule().fill(missing ? Color.kHinomaru : Color.black.opacity(0.6)))
                             .foregroundStyle(.white)
                             .padding(10)
                     }
@@ -626,13 +631,16 @@ struct EditSheet: View {
 
     private func choosePath() {
         let panel = NSOpenPanel()
-        panel.canChooseDirectories = game.kind != .macApp
-        panel.canChooseFiles = game.kind == .macApp
-        if game.kind == .macApp { panel.allowedContentTypes = [.application] }
-        panel.directoryURL = URL(fileURLWithPath: game.path).deletingLastPathComponent()
+        // A game added from Discover has no path yet: accept a folder or an app.
+        let any = !game.installed
+        panel.canChooseDirectories = any || game.kind != .macApp
+        panel.canChooseFiles = any || game.kind == .macApp
+        if !any && game.kind == .macApp { panel.allowedContentTypes = [.application] }
+        if game.installed { panel.directoryURL = URL(fileURLWithPath: game.path).deletingLastPathComponent() }
         if panel.runModal() == .OK, let url = panel.url {
             game.path = url.standardizedFileURL.path
-            if game.kind != .macApp, lib.isSiglus(url) { game.kind = .siglus }
+            if any { game.kind = lib.detectKind(of: url) }
+            else if game.kind != .macApp, lib.isSiglus(url) { game.kind = .siglus }
         }
     }
 }
@@ -703,9 +711,10 @@ extension Notification.Name {
 }
 
 enum SheetKind: Identifiable {
-    case edit(Game), info(UUID), vndb(UUID), newCollection(UUID)
+    case edit(Game), info(UUID), vndb(UUID), newCollection(UUID), discover(VNDB.Result)
     var id: String {
         switch self {
+        case .discover(let r): return "discover-\(r.id)"
         case .newCollection(let id): return "collection-\(id)"
         case .edit(let g): return "edit-\(g.id)"
         case .info(let id): return "info-\(id)"

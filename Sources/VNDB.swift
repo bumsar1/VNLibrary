@@ -34,6 +34,7 @@ enum VNDB {
         let image: Image?
         let developers: [Developer]
         let tags: [Tag]
+        let votecount: Int?
 
         var info: VNInfo {
             // Spoiler tags are never kept. Sexual-content tags are stored apart
@@ -55,12 +56,43 @@ enum VNDB {
         var explicitCover: Bool { (image?.sexual ?? 0) >= 1 }
     }
 
-    private struct Response: Decodable { let results: [Result] }
+    private struct Response: Decodable { let results: [Result]; let more: Bool? }
+
+    enum BrowseSort: String, CaseIterable, Identifiable {
+        case relevance, rating, votecount, released
+        var id: String { rawValue }
+        var label: String {
+            switch self {
+            case .relevance: return "Best match"
+            case .rating: return "Highest rated"
+            case .votecount: return "Most popular"
+            case .released: return "Newest"
+            }
+        }
+    }
+
+    /// One page of VNDB for the Discover tab. With no query it lists the
+    /// whole database in the chosen order (only VNs with enough votes when
+    /// sorting by rating, so obscure 10/10s with two votes don't top it).
+    static func browse(_ query: String, sort: BrowseSort, page: Int) async throws -> (results: [Result], more: Bool) {
+        let q = query.trimmingCharacters(in: .whitespaces)
+        var filters: [Any] = []
+        if !q.isEmpty { filters.append(["search", "=", q]) }
+        if sort == .rating { filters.append(["votecount", ">=", 100]) }
+        if sort == .released { filters.append(["released", "<=", "today"]) }
+        let filter: Any? = filters.isEmpty ? nil : filters.count == 1 ? filters[0] : ["and"] + filters
+        let sortKey = sort == .relevance ? (q.isEmpty ? "votecount" : "searchrank") : sort.rawValue
+        var payload: [String: Any] = ["fields": fields, "results": 40, "page": page,
+                                      "sort": sortKey, "reverse": sortKey != "searchrank"]
+        if let filter { payload["filters"] = filter }
+        let response = try await post(payload)
+        return (response.results, response.more ?? false)
+    }
 
     private static let fields = [
         "id", "title", "alttitle", "released", "length_minutes", "rating", "description",
         "image.url", "image.sexual", "developers.name",
-        "tags.name", "tags.rating", "tags.spoiler", "tags.category",
+        "tags.name", "tags.rating", "tags.spoiler", "tags.category", "votecount",
     ].joined(separator: ",")
 
     static func search(_ query: String, results: Int = 10) async throws -> [Result] {
@@ -72,13 +104,16 @@ enum VNDB {
     }
 
     private static func request(_ filter: [String], results: Int) async throws -> [Result] {
+        // searchrank is only valid together with a search filter.
+        let sort = filter.first == "search" ? "searchrank" : "id"
+        return try await post(["filters": filter, "fields": fields, "results": results, "sort": sort]).results
+    }
+
+    private static func post(_ payload: [String: Any]) async throws -> Response {
         var req = URLRequest(url: URL(string: "https://api.vndb.org/kana/vn")!)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         req.timeoutInterval = 20
-        // searchrank is only valid together with a search filter.
-        let sort = filter.first == "search" ? "searchrank" : "id"
-        let payload: [String: Any] = ["filters": filter, "fields": fields, "results": results, "sort": sort]
         req.httpBody = try JSONSerialization.data(withJSONObject: payload)
         let (data, response) = try await URLSession.shared.data(for: req)
         if let http = response as? HTTPURLResponse, http.statusCode != 200 {
@@ -86,7 +121,7 @@ enum VNDB {
             throw NSError(domain: "VNDB", code: http.statusCode,
                           userInfo: [NSLocalizedDescriptionKey: "VNDB returned \(http.statusCode): \(msg)"])
         }
-        return try JSONDecoder().decode(Response.self, from: data).results
+        return try JSONDecoder().decode(Response.self, from: data)
     }
 
     static func download(_ url: String) async throws -> Data {

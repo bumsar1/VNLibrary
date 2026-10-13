@@ -37,6 +37,8 @@ struct Game: Codable, Identifiable, Equatable {
     var finished: Date?
     var adult: Bool?              // nil = decide from VNDB's sexual-content tags
     var isAdult: Bool { adult ?? !(vndb?.eroTags ?? []).isEmpty }
+    /// Added from Discover without a game folder or app yet.
+    var installed: Bool { !path.isEmpty }
 }
 
 enum SortOrder: String, CaseIterable, Identifiable {
@@ -374,8 +376,19 @@ final class Library: ObservableObject {
         fetching.insert(id)
         Task {
             defer { fetching.remove(id) }
-            guard let best = try? await VNDB.search(query, results: 1).first,
-                  VNDB.plausible(best, for: query) else { return }
+            guard let hits = try? await VNDB.search(query, results: 5), let best = hits.first else { return }
+            // Installing a game that was added from Discover: give the existing
+            // entry (with its status, notes and history) the folder instead.
+            // A planned game among VNDB's top hits is strong enough evidence
+            // even when the names only loosely match.
+            if let planned = games.firstIndex(where: { g in !g.installed && hits.contains { $0.id == g.vndb?.id } }),
+               let new = games.firstIndex(where: { $0.id == id }) {
+                games[planned].path = games[new].path
+                games[planned].kind = games[new].kind
+                remove(id)
+                return
+            }
+            guard VNDB.plausible(best, for: query) else { return }
             await apply(best, to: id, rename: false)
         }
     }
@@ -488,7 +501,26 @@ final class Library: ObservableObject {
     }
 
     func exists(_ game: Game) -> Bool {
-        FileManager.default.fileExists(atPath: game.path)
+        game.installed && FileManager.default.fileExists(atPath: game.path)
+    }
+
+    /// Adds a VN found in Discover as "Plan to play", with no folder yet.
+    /// Returns the existing entry if it's already in the library.
+    @discardableResult
+    func addFromVNDB(_ result: VNDB.Result) async -> UUID {
+        if let existing = games.first(where: { $0.vndb?.id == result.id }) { return existing.id }
+        let game = Game(name: result.title, path: "", kind: .command, status: .planned)
+        games.append(game)
+        save()
+        await apply(result, to: game.id, rename: false)
+        scheduleVNDBSync(game.id)
+        return game.id
+    }
+
+    /// Links a game to its folder or app and works out how to launch it.
+    func detectKind(of url: URL) -> LaunchKind {
+        if url.pathExtension.lowercased() == "app" { return .macApp }
+        return isSiglus(url) ? .siglus : .command
     }
 
     var enginePath: String { (siglusEngine as NSString).expandingTildeInPath }
@@ -498,6 +530,10 @@ final class Library: ObservableObject {
 
     func launch(_ game: Game) {
         guard running[game.id] == nil else { return }
+        guard game.installed else {
+            alert = "\(game.name) isn't installed yet. Right-click → Edit and choose its game folder or app."
+            return
+        }
         guard exists(game) else {
             alert = "\(game.name) wasn't found:\n\(game.path)\n\nDid you move the folder? Fix the path under Edit."
             return

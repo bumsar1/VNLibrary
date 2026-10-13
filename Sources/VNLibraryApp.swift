@@ -45,6 +45,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let urls = add.split(separator: ":").map { URL(fileURLWithPath: String($0)) }
             MainActor.assumeIsolated { _ = Library.shared.add(urls: urls) }
         }
+        if let vid = env["VNLIB_DISCOVER_ADD"] {
+            Task { @MainActor in
+                if let r = try? await VNDB.fetch(id: vid) { await Library.shared.addFromVNDB(r) }
+            }
+        }
         if env["VNLIB_LAUNCH_FIRST"] != nil {
             MainActor.assumeIsolated {
                 if let first = Library.shared.games.first { Library.shared.launch(first) }
