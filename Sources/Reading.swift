@@ -167,6 +167,9 @@ extension Library {
             for line in chunk.split(separator: 0x0A) {
                 guard let f = try? dec.decode(ReadLog.Frame.self, from: Data(line)),
                       let session = sessionIndex(at: f.t, now: now) else { continue }
+                // Text from another app (a browser you switched to) doesn't count. Frames
+                // without a pid, or sessions from before pids were recorded, are trusted.
+                if let pid = f.pid, let pids = sessions[session].pids, !pids.isEmpty, !pids.contains(pid) { continue }
                 let gid = sessions[session].gameID
                 let added = tracker(for: gid).feed(f.lines, at: f.t)
                 if added > 0 { credit(added, game: gid, session: session) }

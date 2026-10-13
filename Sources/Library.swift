@@ -634,7 +634,7 @@ final class Library: ObservableObject {
                 Task { @MainActor in
                     if let pid {
                         self.appPIDs[pid] = game.id
-                        self.started(game.id, couchPID: fullScreen && pid > 0 ? pid : nil)
+                        self.started(game.id, pid: pid, couchPID: fullScreen && pid > 0 ? pid : nil)
                         if fullScreen { FullScreen.request(pid: pid) }
                     } else {
                         self.alert = "Couldn't start \(game.name): \(message ?? "unknown error")"
@@ -686,7 +686,7 @@ final class Library: ObservableObject {
         do {
             try p.run()
             processes[id] = p
-            started(id, couchPID: fullScreen ? p.processIdentifier : nil)
+            started(id, pid: p.processIdentifier, couchPID: fullScreen ? p.processIdentifier : nil)
             if fullScreen { FullScreen.request(pid: p.processIdentifier) }
         } catch {
             alert = "Couldn't start \(game.name): \(error.localizedDescription)"
@@ -695,13 +695,13 @@ final class Library: ObservableObject {
 
     /// `couchPID` is the game's process for couch-mode launches; companions
     /// that understand it (Meikipop) then pick the game window themselves.
-    private func started(_ id: UUID, couchPID: pid_t? = nil) {
+    private func started(_ id: UUID, pid: pid_t? = nil, couchPID: pid_t? = nil) {
         running[id] = Date()
         if let i = games.firstIndex(where: { $0.id == id }) {
             games[i].lastPlayed = Date()
             save()
         }
-        beginSession(id)
+        beginSession(id, pid: pid)
         markPlayingIfNew(id)
         startCompanions(id, gamePID: couchPID)
     }

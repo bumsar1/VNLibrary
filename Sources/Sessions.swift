@@ -11,6 +11,9 @@ struct PlaySession: Codable, Identifiable, Equatable {
     var seconds: Double = 0
     /// Characters read in this session (Meikipop's text log).
     var chars: Int?
+    /// The game's process and its children (zsh → wine → game), so text
+    /// Meikipop read from another app during the session isn't counted.
+    var pids: [Int]?
 }
 
 extension Library {
@@ -43,9 +46,10 @@ extension Library {
 
     // MARK: Recording
 
-    func beginSession(_ gameID: UUID) {
+    func beginSession(_ gameID: UUID, pid: pid_t? = nil) {
         let now = Date()
-        let session = PlaySession(gameID: gameID, start: now, end: now)
+        var session = PlaySession(gameID: gameID, start: now, end: now)
+        if let pid, pid > 0 { session.pids = [Int(pid)] }
         sessions.append(session)
         openSessions[gameID] = session.id
         lastBeat[gameID] = now
@@ -88,6 +92,11 @@ extension Library {
             lastBeat[gameID] = now
             guard let si = sessions.firstIndex(where: { $0.id == sid }) else { continue }
             sessions[si].end = now
+            // Child processes can appear later (wine starting the game): keep collecting them.
+            if let root = sessions[si].pids?.first {
+                let all = Set(sessions[si].pids ?? []).union(Processes.descendants(of: pid_t(root)).map(Int.init))
+                sessions[si].pids = [root] + all.subtracting([root]).sorted()
+            }
             if active {
                 sessions[si].seconds += delta
                 if let gi = games.firstIndex(where: { $0.id == gameID }) { games[gi].playSeconds += delta }

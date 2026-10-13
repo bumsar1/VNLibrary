@@ -19,7 +19,7 @@ enum FullScreen {
         Task.detached {
             for _ in 0..<40 {
                 try? await Task.sleep(for: .milliseconds(500))
-                for p in [pid] + descendants(of: pid) where makeFullScreen(p) { return }
+                for p in [pid] + Processes.descendants(of: pid) where makeFullScreen(p) { return }
             }
         }
     }
@@ -37,8 +37,11 @@ enum FullScreen {
         return AXUIElementSetAttributeValue(window, "AXFullScreen" as CFString, kCFBooleanTrue) == .success
     }
 
+}
+
+enum Processes {
     /// Child processes, recursively (zsh → wine → the game).
-    private static func descendants(of pid: pid_t) -> [pid_t] {
+    static func descendants(of pid: pid_t) -> [pid_t] {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
         p.arguments = ["-P", String(pid)]
