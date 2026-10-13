@@ -162,8 +162,19 @@ struct CouchView: View {
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.white.opacity(0.85))
+                    if !lib.discreet {
+                        Button { toggleUnblur() } label: {
+                            Label(lib.unblurAll ? "Blur again" : "Unblur all", systemImage: lib.unblurAll ? "eye.slash" : "eye")
+                                .font(.system(size: 14, weight: .semibold))
+                                .padding(.horizontal, 12).padding(.vertical, 6)
+                                .background(Capsule().fill(Color.white.opacity(lib.unblurAll ? 0.25 : 0.12)))
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.white.opacity(0.85))
+                        .help("Show every cover and image unblurred until you turn it off or leave couch mode (≡ on a controller)")
+                    }
                     Spacer()
-                    Text("↑↓←→ move    ⏎ / Ⓐ \(actionHint)    / or Ⓨ search    esc / Ⓑ \(query.isEmpty ? "back" : "clear search")")
+                    Text("↑↓←→ move    ⏎ / Ⓐ \(actionHint)    / or Ⓨ search    \(lib.discreet ? "" : "≡ \(lib.unblurAll ? "blur" : "unblur")    ")esc / Ⓑ \(query.isEmpty ? "back" : "clear search")")
                         .font(.system(size: 13))
                         .foregroundStyle(.white.opacity(0.6))
                 }
@@ -223,6 +234,7 @@ struct CouchView: View {
             await loadCategories()
             if let r = env["VNLIB_COUCH_ROW"].flatMap(Int.init) { row = r }
             if let c = env["VNLIB_COUCH_COL"].flatMap(Int.init), rows.indices.contains(row) { cols[rows[row].id] = c }
+            if env["VNLIB_UNBLUR"] != nil { lib.unblurAll = true }
             if env["VNLIB_COUCH_OPEN"] != nil { act() }
             if env["VNLIB_COUCH_OPEN"] == "developer", let d = detail { press(.developer, item: d, delta: 1) }
         }
@@ -268,7 +280,7 @@ struct CouchView: View {
     private var coverBackdrop: some View {
         switch shown {
         case .game(let g):
-            if let img = lib.discreet || g.isBlurred ? lib.blurredImage(for: g) : lib.image(for: g) {
+            if let img = lib.discreet || (g.isBlurred && !lib.unblurAll) ? lib.blurredImage(for: g) : lib.image(for: g) {
                 Image(nsImage: img).resizable().scaledToFill().blur(radius: 18).opacity(0.7)
             }
         case .remote(let r):
@@ -523,7 +535,9 @@ struct CouchView: View {
                 CouchSounds.shared.play(.back)
                 close()
             }
-        case .search, .start:
+        case .start:
+            toggleUnblur()
+        case .search:
             keyboard.text = query
             withAnimation(.easeOut(duration: 0.15)) { typing = true }
             CouchSounds.shared.play(.select)
@@ -807,7 +821,14 @@ struct CouchView: View {
         }
     }
 
+    private func toggleUnblur() {
+        guard !lib.discreet else { CouchSounds.shared.play(.error); return }
+        lib.unblurAll.toggle()
+        CouchSounds.shared.play(lib.unblurAll ? .select : .back)
+    }
+
     private func stop() {
+        lib.unblurAll = false
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
         if let connectObserver { NotificationCenter.default.removeObserver(connectObserver) }

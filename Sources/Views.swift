@@ -433,7 +433,7 @@ struct CoverView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                let hidden = game.isBlurred || lib.discreet
+                let hidden = (game.isBlurred && !lib.unblurAll) || lib.discreet
                 if let img = hidden ? lib.blurredImage(for: game) : lib.image(for: game) {
                     artwork(img, geo.size)
                     if hidden {

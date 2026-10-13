@@ -56,6 +56,7 @@ extension Library {
     /// otherwise when VNDB flags it as suggestive, unless the user revealed it.
     func shouldBlur(sexual: Double, key: String) -> Bool {
         if discreet { return true }
+        if unblurAll { return false }
         return blurSuggestive && sexual >= 1 && !revealed.contains(key)
     }
 

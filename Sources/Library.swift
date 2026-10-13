@@ -93,6 +93,9 @@ final class Library: ObservableObject {
     }
     /// VNDB images the user chose to show this session.
     @Published var revealed: Set<String> = []
+    /// Couch mode's "show everything": no blurred covers or images until
+    /// turned off or couch mode closes. Discreet mode still wins.
+    @Published var unblurAll = false
     @Published var japaneseTitles: Bool {
         didSet { UserDefaults.standard.set(japaneseTitles, forKey: "japaneseTitles") }
     }
