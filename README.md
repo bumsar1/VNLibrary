@@ -51,6 +51,7 @@ Or build it yourself (needs Xcode):
 - **jiten.moe** — length in characters, difficulty, unique words and kanji for each VN, and with a jiten.moe API key how much of its vocabulary you already know
 - **Japanese titles** — show VNDB's original titles (e.g. グリザイアの果実) instead of romaji
 - **Routes** — the heroines from VNDB as a checklist with portraits; tick off cleared routes, add your own (e.g. a true ending). Cards show "2/8 routes"
+- **Permissions** — couch mode needs **Accessibility** (System Settings → Privacy & Security) to put games in full screen. Grant it, and Meikipop's permissions (see its guide), before you play
 - **Companion apps** — open apps like Meikipop alongside every game, or a single one; they close again when the game quits. From couch mode, Meikipop is told which game was started and picks its window by itself, even in full screen
 - **Weekly goal and Year in Review** — a goal ring on the Activity tab, and a yearly summary: hours, days played, longest streak, best day, months, most played and finished games
 - **Try with Whisky / CrossOver** — run a game's .exe through one of your Wine bottles (with a Japanese locale) to see if it plays well, and keep the setup if it does
