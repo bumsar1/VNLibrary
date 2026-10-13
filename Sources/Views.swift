@@ -751,6 +751,11 @@ struct SettingsSheet: View {
                         Text(lib.weeklyGoal == 0 ? "Weekly play goal: off" : "Weekly play goal: \(Int(lib.weeklyGoal)) hours")
                     }
                 }
+                Section("Couch mode") {
+                    Toggle("Sounds when moving around and selecting", isOn: Binding(
+                        get: { UserDefaults.standard.object(forKey: "couchSounds") as? Bool ?? true },
+                        set: { UserDefaults.standard.set($0, forKey: "couchSounds"); if $0 { CouchSounds.shared.play(.select) } }))
+                }
                 Section {
                     Toggle("Discreet mode", isOn: $lib.discreet)
                 } header: {
