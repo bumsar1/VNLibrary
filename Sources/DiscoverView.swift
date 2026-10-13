@@ -6,7 +6,10 @@ struct DiscoverView: View {
     let open: (SheetKind) -> Void
 
     @State private var query = ""
-    @State private var sort: VNDB.BrowseSort = .relevance
+    @AppStorage("discoverSort") private var sort: VNDB.BrowseSort = .released
+    @State private var filters = DiscoverFilters.load()
+    @State private var showFilters = false
+    @State private var adult: Set<String> = []
     @State private var results: [VNDB.Result] = []
     @State private var page = 1
     @State private var more = false
@@ -20,7 +23,7 @@ struct DiscoverView: View {
             ScrollView {
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 20, alignment: .top)], spacing: 22) {
                     ForEach(visible) { r in
-                        DiscoverCard(result: r).onTapGesture { open(.discover(r)) }
+                        DiscoverCard(result: r, adult: isAdult(r)).onTapGesture { open(.discover(r)) }
                     }
                 }
                 .padding(.horizontal, 24)
@@ -36,14 +39,45 @@ struct DiscoverView: View {
                 }
             }
         }
-        .task { if results.isEmpty { await load(reset: true) } }
+        .task {
+            if ProcessInfo.processInfo.environment["VNLIB_OPEN_FILTERS"] != nil { showFilters = true }
+            if results.isEmpty { await load(reset: true) }
+        }
+        .onChange(of: filters) { _, f in
+            f.save()
+            Task { await load(reset: true) }
+        }
     }
 
-    /// Discreet mode leaves out VNs with sexual content.
+    /// 18+ on VNDB (a release rated 18+), or carrying sexual-content tags.
+    private func isAdult(_ r: VNDB.Result) -> Bool {
+        adult.contains(r.id) || !(r.info.eroTags ?? []).isEmpty
+    }
+
+    /// Discreet mode leaves out adult VNs; optionally hide what's already owned.
     private var visible: [VNDB.Result] {
-        lib.discreet ? results.filter { ($0.info.eroTags ?? []).isEmpty } : results
+        results.filter { r in
+            !(lib.discreet && isAdult(r))
+                && !(filters.hideInLibrary && lib.games.contains { $0.vndb?.id == r.id })
+        }
     }
 
+    private var filterChips: some View {
+        let chips = filters.chips
+        return Group {
+            if !chips.isEmpty {
+                WrapLayout(spacing: 6) {
+                    ForEach(Array(chips.enumerated()), id: \.offset) { _, chip in
+                        FilterChip(text: chip.label, symbol: "line.3.horizontal.decrease") { chip.clear(&filters) }
+                    }
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 14)
+            }
+        }
+    }
+
+    @ViewBuilder
     private var controls: some View {
         HStack(spacing: 10) {
             HStack(spacing: 6) {
@@ -70,9 +104,18 @@ struct DiscoverView: View {
             .labelsHidden()
             .frame(width: 150)
             .onChange(of: sort) { _, _ in Task { await load(reset: true) } }
+
+            Button { showFilters.toggle() } label: {
+                Label(filters.chips.isEmpty ? "Filters" : "Filters (\(filters.chips.count))",
+                      systemImage: "line.3.horizontal.decrease.circle")
+            }
+            .popover(isPresented: $showFilters, arrowEdge: .bottom) {
+                DiscoverFilterPanel(filters: $filters)
+            }
         }
         .padding(.horizontal, 24)
-        .padding(.bottom, 16)
+        .padding(.bottom, 12)
+        filterChips
     }
 
     private func load(reset: Bool) async {
@@ -82,7 +125,9 @@ struct DiscoverView: View {
         defer { loading = false }
         let nextPage = reset ? 1 : page + 1
         do {
-            let r = try await VNDB.browse(query, sort: sort, page: nextPage)
+            let r = try await VNDB.browse(query, sort: sort, page: nextPage, filters: filters)
+            let ids = r.results.map(\.id)
+            Task { adult.formUnion(await VNDB.adultIDs(ids)) }
             results = reset ? r.results : results + r.results.filter { n in !results.contains { $0.id == n.id } }
             page = nextPage
             more = r.more
@@ -144,6 +189,7 @@ struct RemoteCover: View {
 struct DiscoverCard: View {
     @EnvironmentObject var lib: Library
     let result: VNDB.Result
+    var adult = false
     @State private var hover = false
 
     var body: some View {
@@ -168,7 +214,9 @@ struct DiscoverCard: View {
                         .padding(7)
                     }
                 }
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(hover ? Color.kAccent : Color.kLine))
+                .overlay(RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(adult ? Color.kHinomaru : hover ? Color.kAccent : Color.kLine, lineWidth: adult ? 2.5 : 1))
+                .overlay(alignment: .bottomTrailing) { if adult { AdultBadge().padding(7) } }
                 .scaleEffect(hover ? 1.02 : 1)
                 .animation(.easeOut(duration: 0.15), value: hover)
             Text(lib.japaneseTitles ? (result.alttitle ?? result.title) : result.title)
@@ -195,6 +243,7 @@ struct DiscoverSheet: View {
     @State private var gallery: [GalleryImage] = []
     @State private var viewing: Int?
     @State private var jiten: JitenInfo?
+    @State private var adult = false
 
     var body: some View {
         let info = result.info
@@ -205,7 +254,9 @@ struct DiscoverSheet: View {
                     .aspectRatio(3.0 / 4.0, contentMode: .fit)
                     .frame(width: 240)
                     .clipShape(RoundedRectangle(cornerRadius: 12))
-                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.kLine))
+                    .overlay(RoundedRectangle(cornerRadius: 12)
+                        .strokeBorder(adult ? Color.kHinomaru : Color.kLine, lineWidth: adult ? 3 : 1))
+                    .overlay(alignment: .bottomTrailing) { if adult { AdultBadge().padding(9) } }
                 if !lib.discreet, lib.revealed.contains(result.image?.url ?? result.id) {
                     Button("Blur Again") { lib.revealed.remove(result.image?.url ?? result.id) }
                         .buttonStyle(.link)
@@ -282,7 +333,11 @@ struct DiscoverSheet: View {
         .frame(width: 820, height: 580)
         .background(Color.kPanel)
         .overlay { GalleryViewer(images: gallery, index: $viewing, gameID: owned?.id) }
-        .task { jiten = await Jiten.info(vndb: result.id, name: result.title) }
+        .task {
+            let rated18 = await VNDB.adultIDs([result.id])
+            adult = !(result.info.eroTags ?? []).isEmpty || !rated18.isEmpty
+            jiten = await Jiten.info(vndb: result.id, name: result.title)
+        }
     }
 
     private func facts(_ info: VNInfo) -> [String] {
@@ -293,5 +348,17 @@ struct DiscoverSheet: View {
         if let r = info.rating { out.append("★ " + String(format: "%.2f", r / 10)) }
         if let v = result.votecount { out.append("\(v.formatted()) votes") }
         return out
+    }
+}
+
+/// Small red "18+" tag for adult VNs.
+struct AdultBadge: View {
+    var body: some View {
+        Text("18+")
+            .font(.system(size: 10, weight: .heavy, design: .rounded))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 6).padding(.vertical, 2)
+            .background(Capsule().fill(Color.kHinomaru))
+            .shadow(color: .black.opacity(0.4), radius: 3, y: 1)
     }
 }

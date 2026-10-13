@@ -74,12 +74,13 @@ enum VNDB {
     /// One page of VNDB for the Discover tab. With no query it lists the
     /// whole database in the chosen order (only VNs with enough votes when
     /// sorting by rating, so obscure 10/10s with two votes don't top it).
-    static func browse(_ query: String, sort: BrowseSort, page: Int) async throws -> (results: [Result], more: Bool) {
+    static func browse(_ query: String, sort: BrowseSort, page: Int,
+                       filters extra: DiscoverFilters = DiscoverFilters()) async throws -> (results: [Result], more: Bool) {
         let q = query.trimmingCharacters(in: .whitespaces)
-        var filters: [Any] = []
+        var filters: [Any] = extra.conditions
         if !q.isEmpty { filters.append(["search", "=", q]) }
         if sort == .rating { filters.append(["votecount", ">=", 100]) }
-        if sort == .released { filters.append(["released", "<=", "today"]) }
+        if sort == .released && extra.released != .years { filters.append(["released", "<=", "today"]) }
         let filter: Any? = filters.isEmpty ? nil : filters.count == 1 ? filters[0] : ["and"] + filters
         let sortKey = sort == .relevance ? (q.isEmpty ? "votecount" : "searchrank") : sort.rawValue
         var payload: [String: Any] = ["fields": fields, "results": 40, "page": page,
@@ -122,6 +123,30 @@ enum VNDB {
                           userInfo: [NSLocalizedDescriptionKey: "VNDB returned \(http.statusCode): \(msg)"])
         }
         return try JSONDecoder().decode(Response.self, from: data)
+    }
+
+    /// Which of these VNs have a release rated 18+.
+    static func adultIDs(_ vids: [String]) async -> Set<String> {
+        guard !vids.isEmpty else { return [] }
+        var out = Set<String>()
+        var page = 1
+        while page <= 4 {
+            let payload: [String: Any] = [
+                "filters": ["and", ["minage", ">=", 18], ["vn", "=", ["or"] + vids.map { ["id", "=", $0] }]],
+                "fields": "vns.id", "results": 100, "page": page,
+            ]
+            var req = URLRequest(url: URL(string: "https://api.vndb.org/kana/release")!)
+            req.httpMethod = "POST"
+            req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            req.httpBody = try? JSONSerialization.data(withJSONObject: payload)
+            struct R: Decodable { struct Rel: Decodable { struct V: Decodable { let id: String }; let vns: [V] }; let results: [Rel]; let more: Bool }
+            guard let data = try? await URLSession.shared.data(for: req).0,
+                  let r = try? JSONDecoder().decode(R.self, from: data) else { break }
+            for rel in r.results { for v in rel.vns { out.insert(v.id) } }
+            if !r.more { break }
+            page += 1
+        }
+        return out.intersection(vids)
     }
 
     static func download(_ url: String) async throws -> Data {

@@ -496,7 +496,11 @@ struct GameCard: View {
             .aspectRatio(3.0 / 4.0, contentMode: .fit)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(coverDrop || hover ? Color.kAccent : Color.kLine, lineWidth: coverDrop ? 3 : 1))
+                .strokeBorder(coverDrop || (hover && !game.isAdult) ? Color.kAccent : game.isAdult ? Color.kHinomaru : Color.kLine,
+                              lineWidth: coverDrop ? 3 : game.isAdult ? 2.5 : 1))
+            .overlay(alignment: .bottomTrailing) {
+                if game.isAdult && !missing && game.installed { AdultBadge().padding(8) }
+            }
             .shadow(color: .black.opacity(hover ? 0.5 : 0.3), radius: hover ? 14 : 8, y: 6)
             .scaleEffect(hover ? 1.02 : 1)
             .animation(.easeOut(duration: 0.15), value: hover)
