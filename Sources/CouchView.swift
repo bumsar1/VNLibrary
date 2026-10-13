@@ -367,6 +367,7 @@ struct CouchView: View {
                     if let y = g.vndb?.year { Text(y) }
                     if g.playSeconds > 0 { Text("Played \(Format.playtime(g.playSeconds))") }
                     if let r = lib.routeProgress(g) { Text(r) }
+                    if let c = g.readChars, c > 0 { Text("\(Count.short(c)) chars read") }
                     if let j = g.jiten { Text(String(format: "difficulty %.1f", j.difficulty)) }
                     if lib.running[g.id] != nil { Text("Running").foregroundStyle(Color.kDone) }
                     if !lib.exists(g) { Text("Not installed").foregroundStyle(Color.kFlame) }

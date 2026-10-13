@@ -9,6 +9,8 @@ struct PlaySession: Codable, Identifiable, Equatable {
     var end: Date
     /// Active time. Lower than end - start when the Mac sat idle mid-session.
     var seconds: Double = 0
+    /// Characters read in this session (Meikipop's text log).
+    var chars: Int?
 }
 
 extension Library {
@@ -59,6 +61,7 @@ extension Library {
 
     func endSession(_ gameID: UUID) {
         beat(only: gameID)
+        defer { processReadLog() }      // after the session is closed, so its text is flushed
         guard let sid = openSessions.removeValue(forKey: gameID) else { return }
         lastBeat[gameID] = nil
         if let s = sessions.first(where: { $0.id == sid }), s.seconds < Self.minimumSession {
@@ -92,6 +95,7 @@ extension Library {
         }
         saveSessions()
         save()
+        if only == nil { processReadLog() }
     }
 
     // MARK: Editing

@@ -131,6 +131,7 @@ struct CouchDetailView: View {
         if let g = game {
             if g.playSeconds > 0 { out.append("Played \(Format.playtime(g.playSeconds))") }
             if let r = lib.routeProgress(g) { out.append(r) }
+            if let c = g.readChars, c > 0 { out.append("\(Count.short(c)) chars read") }
         }
         return out
     }

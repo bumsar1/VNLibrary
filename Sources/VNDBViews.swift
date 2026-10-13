@@ -143,6 +143,9 @@ struct InfoSheet: View {
                         Toggle("Adult Game", isOn: Binding(get: { game.isAdult }, set: { lib.setAdult(id, $0) }))
                         Divider()
                         Button("Save Backups…") { open(.backups(id)) }
+                        if (game.readChars ?? 0) > 0 {
+                            Button("Reset Characters Read") { lib.resetReading(id) }
+                        }
                         if game.installed && lib.exists(game) {
                             Button("Move Game Files to Trash…") { confirmTrash = true }
                         }
@@ -214,6 +217,12 @@ struct InfoSheet: View {
             if let r = info.rating { out.append("★ " + String(format: "%.2f", r / 10)) }
         }
         if let b = game.sizeBytes, lib.exists(game) { out.append(Bytes.format(b)) }
+        if let c = game.readChars, c > 0 {
+            var read = "\(Count.short(c)) chars read"
+            if let total = game.jiten?.characters, total > 0 { read += " · \(min(100, c * 100 / total))% of the text" }
+            out.append(read)
+            if let speed = lib.readingSpeed(game.id) { out.append("\(Count.short(Int(speed)))/h") }
+        }
         if game.playSeconds > 0 {
             var played = "Played \(Format.playtime(game.playSeconds))"
             // Rough progress against VNDB's estimated length.

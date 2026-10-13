@@ -44,6 +44,7 @@ struct Game: Codable, Identifiable, Equatable {
     var engine: VNEngine?
     var saveFolder: String?       // set by hand when it isn't found automatically
     var sizeBytes: Int64?
+    var readChars: Int?           // characters read, from Meikipop's text log
     var isAdult: Bool { adult ?? !(vndb?.eroTags ?? []).isEmpty }
     /// Added from Discover without a game folder or app yet.
     var installed: Bool { !path.isEmpty }
@@ -111,6 +112,7 @@ final class Library: ObservableObject {
     }
     /// Companion apps VN Library started, per running game, so only those get closed.
     var launchedCompanions: [UUID: [NSRunningApplication]] = [:]
+    var readTrackers: [UUID: ReadTracker] = [:]
     @Published var engineUpdate: EngineUpdate.Status = .unknown
     @Published var vndbUser: String? {
         didSet { UserDefaults.standard.set(vndbUser, forKey: "vndbUser") }
@@ -168,6 +170,7 @@ final class Library: ObservableObject {
         loaded = true
         loadSessions()
         detectEngines()
+        processReadLog()
         if ProcessInfo.processInfo.environment["VNLIB_NO_VNDB"] == nil {
             measureSizes()
             scanWatchFolder()

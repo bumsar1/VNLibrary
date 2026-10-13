@@ -50,6 +50,8 @@ struct ActivityView: View {
             StatTile(label: "This month", value: Format.short(lib.seconds(since: month)))
             StatTile(label: "All time", value: Format.short(lib.games.reduce(0) { $0 + $1.playSeconds }))
             StatTile(label: "Streak", value: streak == 1 ? "1 day" : "\(streak) days")
+            StatTile(label: lib.readingSpeed().map { "Read this week · \(Count.short(Int($0)))/h" } ?? "Read this week",
+                     value: "\(Count.short(lib.charsRead(since: week))) chars")
             StatTile(label: "Sessions", value: "\(lib.sessions.count)")
         }
     }
@@ -166,6 +168,9 @@ struct ActivityView: View {
                 .foregroundStyle(Color.kText)
                 .lineLimit(1)
             Spacer()
+            if let c = s.chars, c > 0 {
+                Text("\(Count.short(c)) chars").font(.system(size: 12)).foregroundStyle(Color.kMuted)
+            }
             Text("\(Format.time(s.start)) – \(live ? "now" : Format.time(s.end))")
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(Color.kMuted)
