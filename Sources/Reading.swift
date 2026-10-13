@@ -79,10 +79,10 @@ final class ReadTracker {
     init(seen: Set<UInt64>) { self.seen = seen }
 
     /// Feeds one frame; returns characters newly counted.
-    func feed(_ lines: [String], at t: Double) -> [Counted] {
+    func feed(_ lines: [String], at t: Double, filter: ReadFilter = ReadFilter()) -> [Counted] {
         for raw in lines {
             let n = ReadLog.normalize(raw)
-            guard n.count >= 2 else { continue }
+            guard n.count >= 2, !filter.ignores(raw: raw, normalized: n) else { continue }
             if let i = open.firstIndex(where: { n.hasPrefix($0.text) }) {
                 open[i] = Open(text: n, raw: raw, firstSeen: open[i].firstSeen, lastSeen: t)   // still typing out: keep the longer
             } else if let i = open.firstIndex(where: { $0.text.hasPrefix(n) }) {
@@ -156,6 +156,7 @@ extension Library {
         var offsets = (try? JSONDecoder().decode([String: UInt64].self, from: Data(contentsOf: offsetsFile))) ?? [:]
         var touched = Set<UUID>()
         let dec = JSONDecoder()
+        let filter = ReadFilter.current()
         let now = Date().timeIntervalSince1970
 
         for file in files {
@@ -176,7 +177,7 @@ extension Library {
                 // without a pid, or sessions from before pids were recorded, are trusted.
                 if let pid = f.pid, let pids = sessions[session].pids, !pids.isEmpty, !pids.contains(pid) { continue }
                 let gid = sessions[session].gameID
-                let added = tracker(for: gid).feed(f.lines, at: f.t)
+                let added = tracker(for: gid).feed(f.lines, at: f.t, filter: filter)
                 if !added.isEmpty { credit(added, game: gid, session: session) }
                 touched.insert(gid)
             }
@@ -479,4 +480,79 @@ struct BlacklistEntry: Codable, Hashable, Identifiable {
     let raw: String
     let norm: String
     var id: String { norm }
+}
+
+/// Lines that never count in any game: menu and button words every VN has,
+/// and (optionally) lines without any Japanese in them.
+struct ReadFilter {
+    static let defaultWords = """
+    セーブ ロード クイックセーブ クイックロード Qセーブ Qロード オート オートモード スキップ 既読スキップ 未読スキップ
+    ログ バックログ 履歴 メッセージ履歴 コンフィグ 設定 環境設定 システム オプション メニュー タイトル タイトルへ タイトルに戻る
+    終了 ゲーム終了 はい いいえ 決定 キャンセル 戻る 閉じる 次へ 前へ ボイス 音声 音量 ウィンドウ 全画面 フルスクリーン
+    画面 ヘルプ はじめから 始めから つづきから 続きから おまけ 鑑賞 回想 ギャラリー CGモード シーン回想 音楽鑑賞
+    スクリーンショット 消去 削除 上書き 上書きしますか ページ 名前 日付 データ NODATA NO DATA
+    SAVE LOAD QSAVE QLOAD QUICKSAVE QUICKLOAD AUTO SKIP LOG BACKLOG BACK CONFIG SYSTEM OPTION OPTIONS MENU TITLE
+    EXIT QUIT CLOSE VOICE LOCK RECORD TWITTER HIDE NEXT PREV START CONTINUE EXTRA EXTRAS GALLERY YES NO OK CANCEL
+    NEW GAME NEWGAME SETTINGS HELP FULLSCREEN WINDOW SCREENSHOT
+    """.split(whereSeparator: \.isWhitespace).map(String.init)
+
+    var words: Set<String> = []
+    var japaneseOnly = true
+
+    static func current() -> ReadFilter {
+        let d = UserDefaults.standard
+        let list = d.stringArray(forKey: "readIgnoreWords") ?? defaultWords
+        return ReadFilter(words: Set(list.map { ReadLog.normalize($0).uppercased() }.filter { !$0.isEmpty }),
+                          japaneseOnly: d.object(forKey: "readJapaneseOnly") as? Bool ?? true)
+    }
+
+    func ignores(raw: String, normalized n: String) -> Bool {
+        // A line without kana or kanji is a button, a date or a number.
+        if japaneseOnly && !n.unicodeScalars.contains(where: { (0x3041...0x30FF).contains($0.value) || (0x4E00...0x9FFF).contains($0.value) }) {
+            return true
+        }
+        if words.contains(n.uppercased()) { return true }
+        // A row of menu words ("QSAVE QLOAD SAVE LOAD AUTO") counts as menu too.
+        let tokens = raw.split(whereSeparator: { $0.isWhitespace || "・|/／｜".contains($0) })
+            .map { ReadLog.normalize(String($0)).uppercased() }.filter { !$0.isEmpty }
+        return tokens.count > 1 && tokens.allSatisfy(words.contains)
+    }
+}
+
+import SwiftUI
+
+/// Settings: which words never count.
+struct ReadFilterSettings: View {
+    @State private var text = (UserDefaults.standard.stringArray(forKey: "readIgnoreWords") ?? ReadFilter.defaultWords).joined(separator: "\n")
+    @State private var japaneseOnly = UserDefaults.standard.object(forKey: "readJapaneseOnly") as? Bool ?? true
+    @State private var editing = false
+
+    var body: some View {
+        Toggle("Only count lines with Japanese in them", isOn: $japaneseOnly)
+            .onChange(of: japaneseOnly) { _, v in UserDefaults.standard.set(v, forKey: "readJapaneseOnly") }
+        HStack {
+            Text("Words that never count: \(words.count) (セーブ, ロード, オート, SAVE …)")
+            Spacer()
+            Button(editing ? "Done" : "Edit…") {
+                if editing { UserDefaults.standard.set(words, forKey: "readIgnoreWords") }
+                editing.toggle()
+            }
+        }
+        if editing {
+            TextEditor(text: $text)
+                .font(.system(size: 12, design: .monospaced))
+                .frame(height: 160)
+                .onChange(of: text) { _, _ in UserDefaults.standard.set(words, forKey: "readIgnoreWords") }
+            HStack {
+                Text("One word or phrase per line. Matches whole lines only, so ログ won't remove sentences containing it.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                Spacer()
+                Button("Reset to Defaults") { text = ReadFilter.defaultWords.joined(separator: "\n") }
+            }
+        }
+    }
+
+    private var words: [String] {
+        text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+    }
 }

@@ -798,6 +798,13 @@ struct SettingsSheet: View {
                 } footer: {
                     Text("New game folders and apps that appear in the watched folder are added automatically. Games you remove from the library aren't added again.")
                 }
+                Section {
+                    ReadFilterSettings()
+                } header: {
+                    Text("Characters read (Meikipop)")
+                } footer: {
+                    Text("These apply to all games. Per-game blacklists are under a session's Text read.")
+                }
                 Section("Goal") {
                     Stepper(value: $lib.weeklyGoal, in: 0...80, step: 1) {
                         Text(lib.weeklyGoal == 0 ? "Weekly play goal: off" : "Weekly play goal: \(Int(lib.weeklyGoal)) hours")
