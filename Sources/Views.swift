@@ -53,6 +53,10 @@ struct ContentView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .addGames)) { _ in chooseGames() }
             .onReceive(NotificationCenter.default.publisher(for: .randomGame)) { _ in pickRandom() }
+            .onReceive(NotificationCenter.default.publisher(for: .showDeveloper)) { _ in
+                sheet = nil
+                mode = .discover
+            }
             .onReceive(NotificationCenter.default.publisher(for: .toggleCouch)) { _ in setCouch(!couch) }
             .task { await testHooks() }
     }

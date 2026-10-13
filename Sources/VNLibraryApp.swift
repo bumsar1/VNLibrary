@@ -53,6 +53,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let r = try? await VNDB.fetch(id: vid) { await Library.shared.addFromVNDB(r) }
             }
         }
+        if let dev = env["VNLIB_DEVELOPER"] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                MainActor.assumeIsolated { Library.shared.showDeveloper(name: dev, id: nil) }
+            }
+        }
         if env["VNLIB_LAUNCH_FIRST"] != nil {
             MainActor.assumeIsolated {
                 if let first = Library.shared.games.first { Library.shared.launch(first) }

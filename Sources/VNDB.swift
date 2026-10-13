@@ -10,6 +10,7 @@ struct VNInfo: Codable, Equatable {
     var rating: Double?         // 10–100
     var description: String?
     var developers: [String] = []
+    var developerIDs: [String]?   // VNDB producer ids, same order as `developers`
     var tags: [String] = []
     var eroTags: [String]?      // VNDB's sexual-content tags; optional for older files
 
@@ -21,7 +22,7 @@ struct VNInfo: Codable, Equatable {
 enum VNDB {
     struct Result: Decodable, Identifiable {
         struct Image: Decodable { let url: String; let sexual: Double? }
-        struct Developer: Decodable { let name: String }
+        struct Developer: Decodable { let id: String?; let name: String }
         struct Tag: Decodable { let name: String; let rating: Double; let spoiler: Int; let category: String? }
 
         let id: String
@@ -48,7 +49,8 @@ enum VNDB {
             return VNInfo(id: id, title: title, alttitle: alttitle, released: released,
                           lengthMinutes: length_minutes, rating: rating,
                           description: description.map(VNDB.cleanDescription),
-                          developers: developers.map(\.name), tags: top(["cont", "tech"], 20),
+                          developers: developers.map(\.name), developerIDs: developers.map { $0.id ?? "" },
+                          tags: top(["cont", "tech"], 20),
                           eroTags: top(["ero"], 15))
         }
         var year: String? { released.map { String($0.prefix(4)) } }
@@ -92,7 +94,7 @@ enum VNDB {
 
     private static let fields = [
         "id", "title", "alttitle", "released", "length_minutes", "rating", "description",
-        "image.url", "image.sexual", "developers.name",
+        "image.url", "image.sexual", "developers.id", "developers.name",
         "tags.name", "tags.rating", "tags.spoiler", "tags.category", "votecount",
     ].joined(separator: ",")
 

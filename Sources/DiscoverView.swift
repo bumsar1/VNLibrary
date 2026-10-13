@@ -43,6 +43,9 @@ struct DiscoverView: View {
             if ProcessInfo.processInfo.environment["VNLIB_OPEN_FILTERS"] != nil { showFilters = true }
             if results.isEmpty { await load(reset: true) }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .showDeveloper)) { _ in
+            filters = DiscoverFilters.load()
+        }
         .onChange(of: filters) { _, f in
             f.save()
             Task { await load(reset: true) }
@@ -274,6 +277,9 @@ struct DiscoverSheet: View {
                         Text(alt).font(.system(size: 14)).foregroundStyle(Color.kMuted).textSelection(.enabled)
                     }
                 }
+                if !info.developers.isEmpty {
+                    DeveloperLinks(names: info.developers, ids: info.developerIDs) { dismiss() }
+                }
                 FlowChips(items: facts(info))
                 if let jiten { JitenLine(info: jiten) }
                 ScrollView {
@@ -342,7 +348,6 @@ struct DiscoverSheet: View {
 
     private func facts(_ info: VNInfo) -> [String] {
         var out: [String] = []
-        if !info.developers.isEmpty { out.append(info.developers.joined(separator: ", ")) }
         if let y = info.year, y != "TBA" { out.append(y) }
         if let m = info.lengthMinutes, m > 0 { out.append("~\(max(1, Int((Double(m) / 60).rounded()))) hours") }
         if let r = info.rating { out.append("★ " + String(format: "%.2f", r / 10)) }

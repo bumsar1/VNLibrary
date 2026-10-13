@@ -48,6 +48,9 @@ struct InfoSheet: View {
                     }
                 }
 
+                if let info, !info.developers.isEmpty {
+                    DeveloperLinks(names: info.developers, ids: info.developerIDs) { dismiss() }
+                }
                 FlowChips(items: facts(game))
                 if let j = game.jiten { JitenLine(info: j) }
 
@@ -189,7 +192,6 @@ struct InfoSheet: View {
     private func facts(_ game: Game) -> [String] {
         var out: [String] = []
         if let info = game.vndb {
-            if !info.developers.isEmpty { out.append(info.developers.joined(separator: ", ")) }
             if let y = info.year, y != "TBA" { out.append(y) }
             if let m = info.lengthMinutes, m > 0 { out.append("~\(max(1, Int((Double(m) / 60).rounded()))) hours") }
             if let r = info.rating { out.append("★ " + String(format: "%.2f", r / 10)) }

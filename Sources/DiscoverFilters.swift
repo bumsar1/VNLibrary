@@ -16,6 +16,7 @@ struct DiscoverFilters: Codable, Equatable {
     var finishedOnly = false
     var tags: [TagRef] = []
     var hideInLibrary = false
+    var developer: TagRef?                   // a VNDB producer: "everything by Key"
 
     static let languageNames: [(String, String)] = [("ja", "Japanese"), ("en", "English"), ("zh-Hans", "Chinese (simplified)"),
                                                     ("zh-Hant", "Chinese (traditional)"), ("ko", "Korean")]
@@ -49,12 +50,14 @@ struct DiscoverFilters: Codable, Equatable {
         }
         if finishedOnly { out.append(["devstatus", "=", 0]) }
         for t in tags { out.append(["tag", "=", t.id]) }
+        if let d = developer { out.append(["developer", "=", ["id", "=", d.id]]) }
         return out
     }
 
     /// Short labels for the active filters, each with a way to clear it.
     var chips: [(label: String, clear: (inout DiscoverFilters) -> Void)] {
         var out: [(String, (inout DiscoverFilters) -> Void)] = []
+        if let d = developer { out.append(("By " + d.name, { $0.developer = nil })) }
         if !languages.isEmpty {
             let names = languages.sorted().map { l in Self.languageNames.first { $0.0 == l }?.1 ?? l }
             out.append(("In " + names.joined(separator: " or "), { $0.languages = [] }))
@@ -97,6 +100,21 @@ struct DiscoverFilters: Codable, Equatable {
 extension VNDB {
     private struct TagResponse: Decodable { struct T: Decodable { let id: String; let name: String; let vn_count: Int }; let results: [T] }
 
+    private struct ProducerResponse: Decodable { struct P: Decodable { let id: String; let name: String; let original: String? }; let results: [P] }
+
+    /// VNDB producers (developers and publishers) matching a search.
+    static func searchProducers(_ q: String) async -> [DiscoverFilters.TagRef] {
+        var req = URLRequest(url: URL(string: "https://api.vndb.org/kana/producer")!)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "filters": ["search", "=", q], "fields": "id,name,original", "results": 10,
+        ])
+        guard let data = try? await URLSession.shared.data(for: req).0,
+              let r = try? JSONDecoder().decode(ProducerResponse.self, from: data) else { return [] }
+        return r.results.map { p in DiscoverFilters.TagRef(id: p.id, name: p.original.map { "\(p.name) (\($0))" } ?? p.name) }
+    }
+
     /// VNDB tags matching a search, most used first.
     static func searchTags(_ q: String) async -> [(DiscoverFilters.TagRef, Int)] {
         var req = URLRequest(url: URL(string: "https://api.vndb.org/kana/tag")!)
@@ -116,6 +134,8 @@ struct DiscoverFilterPanel: View {
     @Binding var filters: DiscoverFilters
     @State private var tagQuery = ""
     @State private var tagHits: [(DiscoverFilters.TagRef, Int)] = []
+    @State private var devQuery = ""
+    @State private var devHits: [DiscoverFilters.TagRef] = []
 
     var body: some View {
         ScrollView {
@@ -204,6 +224,29 @@ struct DiscoverFilterPanel: View {
                         .font(.system(size: 12))
                     }
                 }
+                group("Developer / publisher") {
+                    if let d = filters.developer {
+                        toggle(d.name + "  ✕", true) { filters.developer = nil }
+                    }
+                    TextField("Search companies, e.g. Key, Yuzusoft", text: $devQuery)
+                        .textFieldStyle(.roundedBorder)
+                        .task(id: devQuery) {
+                            try? await Task.sleep(for: .milliseconds(350))
+                            guard !Task.isCancelled else { return }
+                            devHits = devQuery.count < 2 ? [] : await VNDB.searchProducers(devQuery)
+                        }
+                    ForEach(devHits, id: \.id) { p in
+                        Button {
+                            filters.developer = p
+                            devQuery = ""
+                            devHits = []
+                        } label: {
+                            Text(p.name).frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .font(.system(size: 12))
+                    }
+                }
                 group("Library") {
                     Toggle("Hide VNs already in my library", isOn: $filters.hideInLibrary)
                 }
@@ -237,5 +280,55 @@ struct DiscoverFilterPanel: View {
                 .overlay(Capsule().strokeBorder(on ? Color.kAccent : Color.kLine))
         }
         .buttonStyle(.plain)
+    }
+}
+
+extension Notification.Name {
+    /// Posted with a TagRef (producer) to open Discover on that company.
+    static let showDeveloper = Notification.Name("VNLibraryShowDeveloper")
+}
+
+extension Library {
+    /// Opens Discover on everything a developer made, newest first. The id is
+    /// looked up by name when the stored VNDB data predates producer ids.
+    func showDeveloper(name: String, id: String?) {
+        Task {
+            var pid = id ?? ""
+            if pid.isEmpty {
+                pid = await VNDB.searchProducers(name).first { $0.name == name || $0.name.hasPrefix(name + " (") }?.id ?? ""
+            }
+            guard !pid.isEmpty else { alert = "Couldn't find \(name) on VNDB."; return }
+            var f = DiscoverFilters.load()
+            f.developer = DiscoverFilters.TagRef(id: pid, name: name)
+            f.save()
+            UserDefaults.standard.set(VNDB.BrowseSort.released.rawValue, forKey: "discoverSort")
+            NotificationCenter.default.post(name: .showDeveloper, object: nil)
+        }
+    }
+}
+
+/// A developer name you can click to see all of their releases.
+struct DeveloperLinks: View {
+    @EnvironmentObject var lib: Library
+    let names: [String]
+    let ids: [String]?
+    var after: () -> Void = {}
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(Array(names.enumerated()), id: \.offset) { i, name in
+                Button {
+                    lib.showDeveloper(name: name, id: ids.flatMap { $0.indices.contains(i) ? $0[i] : nil })
+                    after()
+                } label: {
+                    Chip {
+                        Image(systemName: "building.2").foregroundStyle(Color.kAccent)
+                        Text(name).foregroundStyle(Color.kText).lineLimit(1)
+                    }
+                }
+                .buttonStyle(.plain)
+                .help("Show everything by \(name)")
+            }
+        }
     }
 }
