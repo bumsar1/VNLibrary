@@ -29,6 +29,7 @@ struct ContentView: View {
     @State private var tag: String?
     @State private var status: PlayStatus?
     @State private var collection: String?
+    @State private var installed: Bool?
     @State private var couch = false
     @State private var sheet: SheetKind?
     @State private var showSettings = false
@@ -88,7 +89,7 @@ struct ContentView: View {
     private var mainColumn: some View {
         VStack(spacing: 0) {
             header
-            if mode == .library && (tag != nil || status != nil || collection != nil) { filterChips }
+            if mode == .library && (tag != nil || status != nil || collection != nil || installed != nil) { filterChips }
             if mode == .activity {
                 ActivityView(open: { sheet = $0 })
             } else if mode == .discover {
@@ -217,7 +218,7 @@ struct ContentView: View {
             filterMenu
     }
 
-    private var activeFilters: Int { [tag != nil, status != nil, collection != nil].filter { $0 }.count }
+    private var activeFilters: Int { [tag != nil, status != nil, collection != nil, installed != nil].filter { $0 }.count }
 
     private var filterMenu: some View {
         Menu {
@@ -230,6 +231,10 @@ struct ContentView: View {
                 ForEach(PlayStatus.allCases) { st in
                     Toggle(st.label, isOn: Binding(get: { status == st }, set: { status = $0 ? st : nil }))
                 }
+            }
+            Menu("Installed") {
+                Toggle("Installed — ready to play", isOn: Binding(get: { installed == true }, set: { installed = $0 ? true : nil }))
+                Toggle("Not installed", isOn: Binding(get: { installed == false }, set: { installed = $0 ? false : nil }))
             }
             Menu("Collection") {
                 let all = lib.allCollections
@@ -247,7 +252,7 @@ struct ContentView: View {
             }
             if activeFilters > 0 {
                 Divider()
-                Button("Clear Filters") { tag = nil; status = nil; collection = nil }
+                Button("Clear Filters") { tag = nil; status = nil; collection = nil; installed = nil }
             }
         } label: {
             Label(activeFilters > 0 ? "Filter (\(activeFilters))" : "Filter",
@@ -266,6 +271,10 @@ struct ContentView: View {
         HStack(spacing: 8) {
             if let status { FilterChip(text: status.label, symbol: status.symbol) { self.status = nil } }
             if let collection { FilterChip(text: collection, symbol: "folder") { self.collection = nil } }
+            if let installed {
+                FilterChip(text: installed ? "Installed" : "Not installed",
+                           symbol: installed ? "checkmark.circle" : "arrow.down.circle") { self.installed = nil }
+            }
             if let tag { FilterChip(text: tag, symbol: "tag") { self.tag = nil } }
             Spacer()
         }
@@ -274,21 +283,46 @@ struct ContentView: View {
     }
 
     private var grid: some View {
-        ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 170, maximum: 230), spacing: 22, alignment: .top)], spacing: 26) {
-                ForEach(lib.sorted(sort, filter: search, tag: tag, status: status, collection: collection)) { game in
-                    GameCard(game: game, open: { sheet = $0 })
+        let list = lib.sorted(sort, filter: search, tag: tag, status: status, collection: collection, installed: installed)
+        let ready = list.filter { lib.exists($0) }
+        let notReady = list.filter { !lib.exists($0) }
+        // Split into what can be played now and the rest, unless only one kind is shown.
+        let split = !ready.isEmpty && !notReady.isEmpty
+        return ScrollView {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 170, maximum: 230), spacing: 22, alignment: .top)],
+                      spacing: 26, pinnedViews: []) {
+                if split {
+                    Section { cards(ready) } header: { sectionHeader("Ready to play", ready.count, "checkmark.circle.fill", Color.kDone) }
+                    Section { cards(notReady) } header: {
+                        sectionHeader("Not installed", notReady.count, "arrow.down.circle", Color.kMuted).padding(.top, 14)
+                    }
+                } else {
+                    cards(list)
                 }
             }
             .padding(.horizontal, 24)
             .padding(.bottom, 28)
         }
         .overlay {
-            if lib.sorted(sort, filter: search, tag: tag, status: status, collection: collection).isEmpty {
+            if list.isEmpty {
                 Text("No games match.")
                     .foregroundStyle(Color.kMuted)
             }
         }
+    }
+
+    private func cards(_ games: [Game]) -> some View {
+        ForEach(games) { game in GameCard(game: game, open: { sheet = $0 }) }
+    }
+
+    private func sectionHeader(_ title: String, _ count: Int, _ symbol: String, _ color: Color) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: symbol).foregroundStyle(color)
+            Text(title.uppercased()).font(.system(size: 12, weight: .bold)).foregroundStyle(Color.kText)
+            Text("\(count)").font(.system(size: 12, weight: .semibold)).foregroundStyle(Color.kMuted)
+            Rectangle().fill(Color.kLine).frame(height: 1)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var emptyState: some View {

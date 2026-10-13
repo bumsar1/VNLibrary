@@ -58,7 +58,8 @@ Or build it yourself (needs Xcode):
 - **Status, rating and notes** — Playing / Finished / On hold / Dropped / Plan to play, your own 1–10 rating and notes per game. Starting a game marks it as Playing
 - **VNDB list sync** — connect your VNDB account (API token, kept in the keychain) and status, rating, notes and dates are sent to your list as you change them; import your existing list in one click
 - **Collections** — your own groups, e.g. "Key games"
-- **Filter** — by status, collection or tag, with removable filter chips; sort by last played, name, date added or your rating
+- **Ready to play / Not installed** — the library is split into games you can launch right now and ones without a folder yet (added from Discover, or moved)
+- **Filter** — by status, collection, tag or installed, with removable filter chips; sort by last played, name, date added or your rating
 - **Random pick** — the dice button (⌘R) picks something from your Plan to play list
 - **Couch mode** — full-screen browsing with big covers, driven by the arrow keys or a game controller (⌘⇧F)
 - **Discreet mode** — one click (⌘⇧D) blurs every cover and hides adult games and sexual tags

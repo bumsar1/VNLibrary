@@ -192,12 +192,14 @@ final class Library: ObservableObject {
     }
 
     func sorted(_ order: SortOrder, filter: String, tag: String? = nil,
-                status: PlayStatus? = nil, collection: String? = nil) -> [Game] {
+                status: PlayStatus? = nil, collection: String? = nil, installed: Bool? = nil) -> [Game] {
         let q = filter.trimmingCharacters(in: .whitespaces)
         var list = visibleGames
         if let tag { list = list.filter { tags(of: $0).contains(tag) } }
         if let status { list = list.filter { $0.status == status } }
         if let collection { list = list.filter { $0.collections?.contains(collection) ?? false } }
+        // "Installed" means playable now: linked to a folder or app that's still there.
+        if let installed { list = list.filter { exists($0) == installed } }
         if !q.isEmpty {
             // Search covers the name, VNDB titles, developers and tags.
             list = list.filter { g in
