@@ -56,6 +56,8 @@ struct CouchView: View {
     @State private var typing = false
     @State private var query = ""                            // the committed search
     @State private var searchResults: [VNDB.Result] = []
+    @State private var detail: Item?                         // the game page that's open
+    @State private var detailState = CouchDetailState()
 
     // MARK: Rows
 
@@ -88,6 +90,9 @@ struct CouchView: View {
         !(lib.discreet && (adultRemote.contains(r.id) || !(r.info.eroTags ?? []).isEmpty))
     }
 
+    /// What the backdrop and header follow: the open game page, else the focused tile.
+    private var shown: Item? { detail ?? current }
+
     private var current: Item? {
         let r = rows
         guard r.indices.contains(row) else { return nil }
@@ -105,7 +110,16 @@ struct CouchView: View {
             LinearGradient(colors: [.black.opacity(0.55), .black.opacity(0.2), .black.opacity(0.9)],
                            startPoint: .top, endPoint: .bottom)
             LinearGradient(colors: [.black.opacity(0.75), .clear], startPoint: .leading, endPoint: .center)
+            if detail != nil { Color.black.opacity(0.4).transition(.opacity) }   // keeps the page readable
 
+            if let detail {
+                CouchDetailView(item: detail, state: detailState)
+                    .transition(.opacity)
+                Text(detailHint)
+                    .font(.system(size: 13)).foregroundStyle(.white.opacity(0.6))
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                    .padding(.horizontal, 48).padding(.top, 36)
+            } else {
             VStack(alignment: .leading, spacing: 18) {
                 HStack(spacing: 16) {
                     Text("VN Library").font(.system(size: 20, weight: .bold)).foregroundStyle(.white.opacity(0.85))
@@ -140,8 +154,9 @@ struct CouchView: View {
             }
             .padding(.horizontal, 48)
             .padding(.vertical, 36)
+            }
 
-            if list.isEmpty {
+            if list.isEmpty && detail == nil {
                 Text("No games to show.").font(.title2).foregroundStyle(.white.opacity(0.7))
             }
             if typing {
@@ -176,16 +191,19 @@ struct CouchView: View {
             if let q = env["VNLIB_COUCH_QUERY"] { keyboard.text = q; commitSearch() }
             await loadCategories()
             if let r = env["VNLIB_COUCH_ROW"].flatMap(Int.init) { row = r }
+            if env["VNLIB_COUCH_OPEN"] != nil { act() }
         }
-        .task(id: current?.id) { await loadBackdrop() }
+        .task(id: shown?.id) { await loadBackdrop() }
     }
 
-    private var actionHint: String {
-        switch current {
-        case .game(let g): return lib.exists(g) ? "play" : "info"
-        case .remote: return "add to plan to play"
-        case nil: return "select"
-        }
+    private var actionHint: String { current == nil ? "select" : "open" }
+
+    private var detailHint: String {
+        if detailState.viewing != nil { return "" }
+        let onRating = detail.map { Self.buttons(for: $0, lib: lib) }.map { b in
+            detailState.focusRow == 0 && b.indices.contains(detailState.col) && b[detailState.col] == .rating } ?? false
+        return onRating ? "Ⓐ / ⏎ +1    Ⓧ / − −1    ↓ images    Ⓑ / esc back"
+                        : "← → choose    Ⓐ / ⏎ select    ↓ images    Ⓑ / esc back"
     }
 
     // MARK: Background
@@ -195,7 +213,7 @@ struct CouchView: View {
     private var backdrop: some View {
         Color.black
             .overlay {
-                if let vid = current?.vid, let url = backdrops[vid], !lib.discreet {
+                if let vid = shown?.vid, let url = backdrops[vid], !lib.discreet {
                     AsyncImage(url: URL(string: url)) { phase in
                         if let img = phase.image {
                             img.resizable().scaledToFill()
@@ -210,12 +228,12 @@ struct CouchView: View {
                 }
             }
             .clipped()
-            .animation(.easeInOut(duration: 0.4), value: current?.id)
+            .animation(.easeInOut(duration: 0.4), value: shown?.id)
     }
 
     @ViewBuilder
     private var coverBackdrop: some View {
-        switch current {
+        switch shown {
         case .game(let g):
             if let img = lib.discreet || g.isBlurred ? lib.blurredImage(for: g) : lib.image(for: g) {
                 Image(nsImage: img).resizable().scaledToFill().blur(radius: 18).opacity(0.7)
@@ -230,9 +248,9 @@ struct CouchView: View {
     }
 
     private func loadBackdrop() async {
-        guard let vid = current?.vid, backdrops[vid] == nil else { return }
+        guard let vid = shown?.vid, backdrops[vid] == nil else { return }
         try? await Task.sleep(for: .milliseconds(250))     // don't fetch while scrolling past
-        guard !Task.isCancelled, current?.vid == vid else { return }
+        guard !Task.isCancelled, shown?.vid == vid else { return }
         let images = (try? await VNDB.gallery(for: vid)) ?? []
         let limit = lib.blurSuggestive ? 0.5 : 1.5
         if let shot = images.first(where: { $0.kind == "Screenshot" && $0.sexual < limit }) {
@@ -411,6 +429,7 @@ struct CouchView: View {
 
     private func handle(_ input: Input) {
         if typing { return handleKeyboard(input) }
+        if detail != nil { return handleDetail(input) }
         switch input {
         case .left: move(col: -1)
         case .right: move(col: 1)
@@ -497,25 +516,128 @@ struct CouchView: View {
         CouchSounds.shared.play(.row)
     }
 
+    /// Opens the game page for the focused tile.
     private func act() {
-        switch current {
-        case .game(let g):
-            if lib.exists(g) {
-                CouchSounds.shared.play(.select)
-                lib.launch(g, fullScreen: true)
-                show("Starting \(lib.displayName(g))…")
-            } else {
-                CouchSounds.shared.play(.error)
-                show(g.installed ? "Its folder is missing. Fix the path under Edit." : "Not installed yet. Drop its game folder into the library.")
+        guard let item = current else { CouchSounds.shared.play(.error); return }
+        CouchSounds.shared.play(.select)
+        detailState = CouchDetailState()
+        withAnimation(.easeInOut(duration: 0.2)) { detail = item }
+        if let vid = item.vid {
+            Task {
+                let images = (try? await VNDB.gallery(for: vid)) ?? []
+                if detail?.id == item.id { detailState.images = images }
             }
-        case .remote(let r):
+        }
+    }
+
+    private func closeDetail() {
+        CouchSounds.shared.play(.back)
+        withAnimation(.easeInOut(duration: 0.2)) { detail = nil }
+    }
+
+    private func handleDetail(_ input: Input) {
+        guard let item = detail else { return }
+        let buttons = Self.buttons(for: item, lib: lib)
+        let images = detailState.images
+        func step(_ d: Int, count: Int) {
+            let c = detailState.col + d
+            guard c >= 0, c < count else { CouchSounds.shared.play(.error); return }
+            detailState.col = c
+            CouchSounds.shared.play(.move)
+        }
+        // A gallery image is open full screen.
+        if let i = detailState.viewing {
+            switch input {
+            case .left, .right:
+                let back: Bool = { if case .left = input { return true } else { return false } }()
+                let n = (i + (back ? -1 : 1) + images.count) % max(images.count, 1)
+                detailState.viewing = n
+                detailState.col = n
+                CouchSounds.shared.play(.move)
+            case .accept:
+                let img = images[i]
+                if lib.shouldBlur(sexual: img.sexual, key: img.url) && !lib.discreet {
+                    lib.revealed.insert(img.url)
+                    CouchSounds.shared.play(.row)
+                } else {
+                    detailState.viewing = nil
+                    CouchSounds.shared.play(.back)
+                }
+            case .back, .backspace:
+                detailState.viewing = nil
+                CouchSounds.shared.play(.back)
+            default: break
+            }
+            return
+        }
+        switch input {
+        case .left: step(-1, count: detailState.focusRow == 0 ? buttons.count : images.count)
+        case .right: step(1, count: detailState.focusRow == 0 ? buttons.count : images.count)
+        case .down:
+            guard detailState.focusRow == 0, !images.isEmpty else { CouchSounds.shared.play(.error); return }
+            detailState.focusRow = 1
+            detailState.col = 0
+            CouchSounds.shared.play(.row)
+        case .up:
+            guard detailState.focusRow == 1, !buttons.isEmpty else { CouchSounds.shared.play(.error); return }
+            detailState.focusRow = 0
+            detailState.col = 0
+            CouchSounds.shared.play(.row)
+        case .accept:
+            if detailState.focusRow == 1 {
+                guard images.indices.contains(detailState.col) else { return }
+                detailState.viewing = detailState.col
+                CouchSounds.shared.play(.select)
+            } else if buttons.indices.contains(detailState.col) {
+                press(buttons[detailState.col], item: item, delta: 1)
+            }
+        case .backspace:
+            // X lowers the rating when it's focused.
+            if detailState.focusRow == 0, buttons.indices.contains(detailState.col), buttons[detailState.col] == .rating {
+                press(.rating, item: item, delta: -1)
+            }
+        case .type(let t):
+            if t == "-" { handleDetail(.backspace) } else if t == "+" || t == "=" { handleDetail(.accept) }
+        case .back: closeDetail()
+        case .search, .start: break
+        }
+    }
+
+    private func press(_ button: CouchDetailState.Button, item: Item, delta: Int) {
+        let gameID: UUID? = {
+            switch item {
+            case .game(let g): return g.id
+            case .remote(let r): return lib.games.first { $0.vndb?.id == r.id }?.id
+            }
+        }()
+        let game = gameID.flatMap { id in lib.games.first { $0.id == id } }
+        switch button {
+        case .play:
+            guard let game else { return }
+            CouchSounds.shared.play(.select)
+            lib.launch(game, fullScreen: true)
+            show("Starting \(lib.displayName(game))…")
+        case .status:
+            guard let game else { return }
+            // Cycles: none → Playing → Finished → On hold → Dropped → Plan to play → none.
+            let order: [PlayStatus?] = [nil, .playing, .finished, .onHold, .dropped, .planned]
+            let i = order.firstIndex(of: game.status) ?? 0
+            lib.setStatus(game.id, order[(i + 1) % order.count])
+            CouchSounds.shared.play(.row)
+        case .rating:
+            guard let game else { return }
+            let r = game.userRating ?? (delta > 0 ? 6 : 1)
+            let next = r + (game.userRating == nil ? 0 : delta)
+            lib.setRating(game.id, next < 1 || next > 10 ? nil : next)
+            CouchSounds.shared.play(next < 1 || next > 10 ? .back : .row)
+        case .add:
+            guard case .remote(let r) = item else { return }
             CouchSounds.shared.play(.add)
             Task {
                 await lib.addFromVNDB(r)
+                detailState.col = 0
                 show("Added \(r.title) to Plan to play")
             }
-        case nil:
-            CouchSounds.shared.play(.error)
         }
     }
 
