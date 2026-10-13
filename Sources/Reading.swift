@@ -73,6 +73,7 @@ final class ReadTracker {
     struct Counted { let raw: String; let chars: Int; let t: Double }
     var open: [Open] = []
     var seen: Set<UInt64>
+    var blacklist: Set<UInt64> = []    // sentences the user said never to count in this game
     var recent: [String] = []       // last committed lines, for fuzzy matching
 
     init(seen: Set<UInt64>) { self.seen = seen }
@@ -106,7 +107,7 @@ final class ReadTracker {
         open.removeAll(where: done)
         for o in finished {
             let h = ReadLog.hash(o.text)
-            guard !seen.contains(h) else { continue }
+            guard !seen.contains(h), !blacklist.contains(h) else { continue }
             seen.insert(h)
             if recent.suffix(150).contains(where: { ReadLog.similarity($0, o.text) >= 0.88 }) { continue }
             recent.append(o.text)
@@ -132,6 +133,7 @@ extension Library {
             }
         }
         let t = ReadTracker(seen: seen)
+        t.blacklist = Set(blacklist(game: id).map { ReadLog.hash($0.norm) })
         readTrackers[id] = t
         return t
     }
@@ -238,12 +240,32 @@ extension Library {
         return data.split(separator: 0x0A).compactMap { try? dec.decode(ReadLine.self, from: Data($0)) }
     }
 
-    /// Removes lines from the count (junk OCR, menus, another window's text).
-    /// They stay "seen", so the same text isn't counted again later.
-    func deleteReadLines(_ ids: Set<UUID>, game: UUID) {
+    /// Takes lines off the count. Deleting forgets them, so the same text
+    /// counts again if it comes up later (OCR caught it at a bad moment);
+    /// blacklisting means that exact sentence never counts in this game.
+    func deleteReadLines(_ ids: Set<UUID>, game: UUID, blacklist: Bool = false) {
         let all = readLines(game: game)
         let gone = all.filter { ids.contains($0.id) }
         guard !gone.isEmpty else { return }
+        let t = tracker(for: game)
+        for l in gone {
+            let n = ReadLog.normalize(l.text)
+            let h = ReadLog.hash(n)
+            if blacklist {
+                t.blacklist.insert(h)
+            } else {
+                t.seen.remove(h)
+                t.recent.removeAll { $0 == n }
+            }
+        }
+        if blacklist {
+            var list = self.blacklist(game: game)
+            for l in gone where !list.contains(where: { $0.norm == ReadLog.normalize(l.text) }) {
+                list.append(BlacklistEntry(raw: l.text, norm: ReadLog.normalize(l.text)))
+            }
+            saveBlacklist(list, game: game)
+        }
+        saveSeen(game)
         for l in gone {
             if let s = sessions.firstIndex(where: { $0.id == l.session }) {
                 sessions[s].chars = max(0, (sessions[s].chars ?? 0) - l.chars)
@@ -258,6 +280,26 @@ extension Library {
         try? data.write(to: linesFile(game), options: .atomic)
         save()
         saveSessions()
+    }
+
+    private func blacklistFile(_ id: UUID) -> URL { readingDir.appendingPathComponent("\(id.uuidString).blacklist.json") }
+
+    func blacklist(game: UUID) -> [BlacklistEntry] {
+        (try? JSONDecoder().decode([BlacklistEntry].self, from: Data(contentsOf: blacklistFile(game)))) ?? []
+    }
+
+    private func saveBlacklist(_ list: [BlacklistEntry], game: UUID) {
+        try? FileManager.default.createDirectory(at: readingDir, withIntermediateDirectories: true)
+        if let d = try? JSONEncoder().encode(list) { try? d.write(to: blacklistFile(game), options: .atomic) }
+    }
+
+    /// Lets a blacklisted sentence count again from now on.
+    func unblacklist(_ entry: BlacklistEntry, game: UUID) {
+        saveBlacklist(blacklist(game: game).filter { $0.norm != entry.norm }, game: game)
+        let h = ReadLog.hash(entry.norm)
+        tracker(for: game).blacklist.remove(h)
+        tracker(for: game).seen.remove(h)
+        saveSeen(game)
     }
 
     func resetReading(_ id: UUID) {
@@ -305,7 +347,11 @@ struct ReadTextSheet: View {
     @State private var lines: [ReadLine] = []
     @State private var selection = Set<UUID>()
     @State private var search = ""
-    @State private var confirm = false
+    @State private var confirm: Action?
+    @State private var showBlacklist = false
+    @State private var blacklisted: [BlacklistEntry] = []
+
+    enum Action: Identifiable { case delete, blacklist; var id: Self { self } }
 
     private var shown: [ReadLine] {
         let q = search.trimmingCharacters(in: .whitespaces)
@@ -328,6 +374,7 @@ struct ReadTextSheet: View {
             }
             HStack {
                 TextField("Search the text", text: $search).textFieldStyle(.roundedBorder)
+                Button(showBlacklist ? "Text" : "Blacklist (\(blacklisted.count))") { showBlacklist.toggle() }
                 Menu("Select") {
                     Button("Lines Under 4 Characters") { selection = Set(list.filter { $0.chars < 4 }.map(\.id)) }
                     Button("Lines Matching Search") { selection = Set(list.map(\.id)) }
@@ -336,7 +383,9 @@ struct ReadTextSheet: View {
                 }
                 .fixedSize()
             }
-            if list.isEmpty {
+            if showBlacklist {
+                blacklistView
+            } else if list.isEmpty {
                 Text(lines.isEmpty ? "No text kept yet. It's saved from now on while you play with Meikipop open."
                                    : "No lines match.")
                     .foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 200)
@@ -353,31 +402,62 @@ struct ReadTextSheet: View {
                     .tag(l.id)
                 }
                 .frame(minHeight: 360)
-                .onDeleteCommand { if !selection.isEmpty { confirm = true } }
+                .onDeleteCommand { if !selection.isEmpty { confirm = .delete } }
             }
             HStack {
-                Text("Deleted lines are taken off the count and won't be counted again.")
+                Text("Delete: off the count, but it can count again later. Blacklist: never counts again in this game.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                 Spacer()
-                Button(selection.isEmpty ? "Delete" : "Delete \(selection.count) Line\(selection.count == 1 ? "" : "s")", role: .destructive) {
-                    confirm = true
+                if !showBlacklist {
+                    Button("Delete") { confirm = .delete }
+                        .disabled(selection.isEmpty)
+                    Button("Blacklist", role: .destructive) { confirm = .blacklist }
+                        .disabled(selection.isEmpty)
                 }
-                .disabled(selection.isEmpty)
                 Button("Done") { dismiss() }.keyboardShortcut(.defaultAction)
             }
         }
         .padding(22)
-        .frame(width: 720, height: 600)
-        .onAppear { lines = lib.readLines(game: game) }
-        .confirmationDialog("Remove \(selection.count) line\(selection.count == 1 ? "" : "s") from the count?", isPresented: $confirm) {
-            Button("Delete", role: .destructive) {
-                lib.deleteReadLines(selection, game: game)
+        .frame(width: 760, height: 600)
+        .onAppear(perform: reload)
+        .confirmationDialog(confirm == .blacklist ? "Blacklist \(selection.count) sentence\(selection.count == 1 ? "" : "s")?"
+                                                  : "Delete \(selection.count) line\(selection.count == 1 ? "" : "s")?",
+                            isPresented: Binding(get: { confirm != nil }, set: { if !$0 { confirm = nil } }),
+                            presenting: confirm) { action in
+            Button(action == .blacklist ? "Blacklist" : "Delete", role: .destructive) {
+                lib.deleteReadLines(selection, game: game, blacklist: action == .blacklist)
                 selection = []
-                lines = lib.readLines(game: game)
+                reload()
             }
-        } message: {
+        } message: { action in
             let chars = lines.filter { selection.contains($0.id) }.reduce(0) { $0 + $1.chars }
-            Text("\(Count.short(chars)) characters will be subtracted.")
+            Text(action == .blacklist
+                 ? "\(Count.short(chars)) characters are subtracted, and the same sentence won't count again in this game. You can undo it under Blacklist."
+                 : "\(Count.short(chars)) characters are subtracted. If the same text shows up again later, it counts again.")
+        }
+    }
+
+    private func reload() {
+        lines = lib.readLines(game: game)
+        blacklisted = lib.blacklist(game: game)
+    }
+
+    @ViewBuilder
+    private var blacklistView: some View {
+        if blacklisted.isEmpty {
+            Text("Nothing blacklisted. Select lines and choose Blacklist to stop sentences like menu labels from counting.")
+                .foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 200)
+        } else {
+            List(blacklisted) { b in
+                HStack {
+                    Text(b.raw).font(.system(size: 14)).frame(maxWidth: .infinity, alignment: .leading)
+                    Button("Allow Again") {
+                        lib.unblacklist(b, game: game)
+                        reload()
+                    }
+                }
+            }
+            .frame(minHeight: 360)
         }
     }
 
@@ -393,4 +473,10 @@ struct ReadTextSheet: View {
         let d = Date(timeIntervalSince1970: t)
         return session == nil ? "\(Format.date(d).prefix(6)) \(Format.time(d))" : Format.time(d)
     }
+}
+
+struct BlacklistEntry: Codable, Hashable, Identifiable {
+    let raw: String
+    let norm: String
+    var id: String { norm }
 }

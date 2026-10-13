@@ -56,6 +56,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let r = try? await VNDB.fetch(id: vid) { await Library.shared.addFromVNDB(r) }
             }
         }
+        // Test hook: "delete:<text>" or "blacklist:<text>" on the first game's counted lines.
+        if let action = env["VNLIB_READ_ACTION"], let colon = action.firstIndex(of: ":") {
+            MainActor.assumeIsolated {
+                let lib = Library.shared
+                let text = String(action[action.index(after: colon)...])
+                if let g = lib.games.first {
+                    let ids = Set(lib.readLines(game: g.id).filter { $0.text == text }.map(\.id))
+                    lib.deleteReadLines(ids, game: g.id, blacklist: action.hasPrefix("blacklist"))
+                }
+            }
+        }
         if env["VNLIB_READ_TEXT"] != nil {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
                 MainActor.assumeIsolated {
