@@ -180,6 +180,7 @@ final class Library: ObservableObject {
         loadSessions()
         detectEngines()
         purgePopupText()
+        for g in games { recomputeReadTime(game: g.id, onlyMissing: true) }
         processReadLog()
         if ProcessInfo.processInfo.environment["VNLIB_NO_VNDB"] == nil {
             measureSizes()

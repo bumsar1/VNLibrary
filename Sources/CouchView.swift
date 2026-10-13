@@ -212,6 +212,7 @@ struct CouchView: View {
             if let q = env["VNLIB_COUCH_QUERY"] { keyboard.text = q; commitSearch() }
             await loadCategories()
             if let r = env["VNLIB_COUCH_ROW"].flatMap(Int.init) { row = r }
+            if let c = env["VNLIB_COUCH_COL"].flatMap(Int.init), rows.indices.contains(row) { cols[rows[row].id] = c }
             if env["VNLIB_COUCH_OPEN"] != nil { act() }
         }
         .task(id: shown?.id) { await loadBackdrop() }
@@ -304,6 +305,9 @@ struct CouchView: View {
                             tileView(item, row: r, index: i, selected: focused && i == col, focused: focused)
                         }
                     }
+                    // A lazy stack sizes itself from the tiles it has laid out so far,
+                    // so a selected tile further along got its top cut off. Fix the height.
+                    .frame(height: focused ? 267 : 160, alignment: .bottom)
                     .padding(.vertical, 6)
                     .padding(.horizontal, 4)
                     .animation(.spring(response: 0.28, dampingFraction: 0.82), value: col)

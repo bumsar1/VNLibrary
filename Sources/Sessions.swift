@@ -14,6 +14,13 @@ struct PlaySession: Codable, Identifiable, Equatable {
     /// The game's process and its children (zsh → wine → game), so text
     /// Meikipop read from another app during the session isn't counted.
     var pids: [Int]?
+    /// Time spent actually reading: the gaps between lines of text, each
+    /// capped, so menus and walking away don't count. Nil before text.
+    var readSeconds: Double?
+    var lastLineT: Double?
+
+    /// The time reading speed is measured over.
+    var readTime: Double { readSeconds ?? seconds }
 }
 
 extension Library {

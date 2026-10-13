@@ -212,9 +212,34 @@ extension Library {
         sessions[session].chars = (sessions[session].chars ?? 0) + chars
         if let i = games.firstIndex(where: { $0.id == game }) { games[i].readChars = (games[i].readChars ?? 0) + chars }
         let sid = sessions[session].id
+        for l in lines.sorted(by: { $0.t < $1.t }) {
+            if let prev = sessions[session].lastLineT, l.t >= prev {
+                sessions[session].readSeconds = (sessions[session].readSeconds ?? 0) + min(l.t - prev, Self.lineGapCap)
+            }
+            sessions[session].lastLineT = max(sessions[session].lastLineT ?? 0, l.t)
+        }
         appendReadLines(lines.map { ReadLine(session: sid, t: $0.t, text: $0.raw, chars: $0.chars) }, game: game)
         lastLinesCache[game] = Array(((lastLinesCache[game] ?? lastLines(game)) + lines.map(\.raw)).suffix(3))
         checkFinished(game)
+    }
+
+    /// The longest a single line can add to reading time; a longer pause is
+    /// a menu, a scene without text or a break.
+    static let lineGapCap: Double = 90
+
+    /// Rebuilds the sessions' reading time from the kept lines, after lines
+    /// were deleted or for sessions from before reading time was measured.
+    func recomputeReadTime(game: UUID, onlyMissing: Bool = false) {
+        let byS = Dictionary(grouping: readLines(game: game), by: \.session)
+        var changed = false
+        for i in sessions.indices where sessions[i].gameID == game && (sessions[i].chars ?? 0) > 0 {
+            if onlyMissing && sessions[i].readSeconds != nil { continue }
+            let ts = (byS[sessions[i].id] ?? []).map(\.t).sorted()
+            sessions[i].readSeconds = zip(ts, ts.dropFirst()).reduce(0) { $0 + min($1.1 - $1.0, Self.lineGapCap) }
+            sessions[i].lastLineT = ts.last
+            changed = true
+        }
+        if changed { saveSessions() }
     }
 
     /// The last few lines read in a game, for "where you left off".
@@ -309,6 +334,7 @@ extension Library {
         for l in keep { if let d = try? JSONEncoder().encode(l) { data.append(d); data.append(0x0A) } }
         try? data.write(to: linesFile(game), options: .atomic)
         save()
+        recomputeReadTime(game: game)
         saveSessions()
     }
 
@@ -330,6 +356,25 @@ extension Library {
         tracker(for: game).blacklist.remove(h)
         tracker(for: game).seen.remove(h)
         saveSeen(game)
+    }
+
+    /// Lines that look like a menu or OCR noise: eight or more short lines
+    /// without punctuation turning up within seconds of each other (a config
+    /// screen, a save menu). Choices come three to six at a time, so they stay.
+    static func suggestedBlacklist(_ lines: [ReadLine]) -> Set<UUID> {
+        func bare(_ t: String) -> Bool { t.count <= 16 && !t.contains(where: { "。、！？!?「」『』…―〜".contains($0) }) }
+        var out = Set<UUID>(), group: [ReadLine] = []
+        func flush() {
+            let short = group.filter { bare($0.text) }
+            if short.count >= 8 { out.formUnion(short.map(\.id)) }
+            group = []
+        }
+        for l in lines.sorted(by: { $0.t < $1.t }) {
+            if let last = group.last, l.session != last.session || l.t - last.t > 3 { flush() }
+            group.append(l)
+        }
+        flush()
+        return out
     }
 
     /// Takes popup text that was counted before the filter knew about it
@@ -358,8 +403,8 @@ extension Library {
     /// Characters per hour of play, over the sessions where text was logged.
     func readingSpeed(_ id: UUID? = nil) -> Double? {
         let s = sessions.filter { ($0.chars ?? 0) > 0 && (id == nil || $0.gameID == id) }
-        let secs = s.reduce(0) { $0 + $1.seconds }
-        guard secs > 600 else { return nil }
+        let secs = s.reduce(0) { $0 + $1.readTime }
+        guard secs >= 300 else { return nil }
         return Double(s.reduce(0) { $0 + ($1.chars ?? 0) }) / (secs / 3600)
     }
 
@@ -419,12 +464,26 @@ struct ReadTextSheet: View {
                 TextField("Search the text", text: $search).textFieldStyle(.roundedBorder)
                 Button(showBlacklist ? "Text" : "Blacklist (\(blacklisted.count))") { showBlacklist.toggle() }
                 Menu("Select") {
+                    Button("Menus & OCR Noise") { selection = Library.suggestedBlacklist(list) }
                     Button("Lines Under 4 Characters") { selection = Set(list.filter { $0.chars < 4 }.map(\.id)) }
                     Button("Lines Matching Search") { selection = Set(list.map(\.id)) }
                         .disabled(search.isEmpty)
                     Button("None") { selection = [] }
                 }
                 .fixedSize()
+            }
+            let suggested = Library.suggestedBlacklist(list)
+            if !showBlacklist && !suggested.isEmpty {
+                HStack(spacing: 10) {
+                    Image(systemName: "wand.and.stars").foregroundStyle(Color.kAccent)
+                    Text("\(suggested.count) lines look like menus or OCR noise (\(Count.short(list.filter { suggested.contains($0.id) }.reduce(0) { $0 + $1.chars })) chars).")
+                        .font(.system(size: 12))
+                    Spacer()
+                    Button("Select Them") { selection = suggested }
+                    Button("Blacklist Them") { selection = suggested; confirm = .blacklist }
+                }
+                .padding(10)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.kAccent.opacity(0.12)))
             }
             if showBlacklist {
                 blacklistView
@@ -508,7 +567,9 @@ struct ReadTextSheet: View {
         guard let session, let s = lib.sessions.first(where: { $0.id == session }) else { return nil }
         var label = "\(Format.day(s.start)) \(Format.time(s.start))–\(Format.time(s.end))"
         // Reading speed over the session's active time.
-        if let c = s.chars, c > 0, s.seconds >= 300 { label += " · \(Count.short(Int(Double(c) / (s.seconds / 3600)))) chars/h" }
+        if let c = s.chars, c > 0, s.readTime >= 120 {
+            label += " · \(Count.short(Int(Double(c) / (s.readTime / 3600)))) chars/h over \(Format.playtime(s.readTime)) of reading"
+        }
         return label
     }
 

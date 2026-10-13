@@ -187,7 +187,7 @@ struct ActivityView: View {
             Spacer()
             if let c = s.chars, c > 0 {
                 Button { open(.readText(s.gameID, s.id)) } label: {
-                    Label(s.seconds >= 300 ? "\(Count.short(c)) chars · \(Count.short(Int(Double(c) / (s.seconds / 3600))))/h"
+                    Label(s.readTime >= 120 ? "\(Count.short(c)) chars · \(Count.short(Int(Double(c) / (s.readTime / 3600))))/h"
                                            : "\(Count.short(c)) chars", systemImage: "text.alignleft")
                         .font(.system(size: 12)).foregroundStyle(Color.kAccent)
                 }

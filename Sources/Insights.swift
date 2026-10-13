@@ -64,8 +64,8 @@ extension Library {
             let start = cal.date(byAdding: .weekOfYear, value: -back, to: thisWeek)!
             let end = cal.date(byAdding: .weekOfYear, value: 1, to: start)!
             let s = sessions.filter { ($0.chars ?? 0) > 0 && $0.start >= start && $0.start < end }
-            let secs = s.reduce(0) { $0 + $1.seconds }
-            guard secs >= 600 else { return nil }
+            let secs = s.reduce(0) { $0 + $1.readTime }
+            guard secs >= 300 else { return nil }
             return (start, Double(s.reduce(0) { $0 + ($1.chars ?? 0) }) / (secs / 3600))
         }
     }
@@ -77,10 +77,10 @@ extension Library {
         for s in sessions where (s.chars ?? 0) > 0 {
             let b = cal.component(.hour, from: s.start) / 3
             chars[b] += s.chars ?? 0
-            secs[b] += s.seconds
+            secs[b] += s.readTime
         }
         return (0..<8).compactMap { b in
-            guard secs[b] >= 600 else { return nil }
+            guard secs[b] >= 300 else { return nil }
             return (String(format: "%02d–%02d", b * 3, b * 3 + 3), Double(chars[b]) / (secs[b] / 3600), secs[b] / 3600)
         }
     }
