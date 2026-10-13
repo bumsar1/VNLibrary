@@ -13,6 +13,15 @@ struct ActivityView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 28) {
                 tiles
+                if lib.weeklyGoal > 0 {
+                    HStack(spacing: 12) {
+                        GoalTile(seconds: lib.seconds(since: cal.dateInterval(of: .weekOfYear, for: Date())!.start),
+                                 goalHours: lib.weeklyGoal)
+                        reviewButton
+                    }
+                } else {
+                    reviewButton
+                }
                 section("Last 12 months") {
                     Heatmap(totals: lib.dayTotals(), selected: $selectedDay)
                 }
@@ -45,6 +54,19 @@ struct ActivityView: View {
         }
     }
 
+    private var reviewButton: some View {
+        Button {
+            open(.review(cal.component(.year, from: Date())))
+        } label: {
+            Label("\(String(cal.component(.year, from: Date()))) in Review", systemImage: "sparkles")
+                .font(.system(size: 13, weight: .semibold))
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                .background(RoundedRectangle(cornerRadius: 10).fill(Color.kPanel))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Color.kLine))
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: Top games
 
     private func topGames() -> [(game: Game, seconds: Double)] {
@@ -63,7 +85,7 @@ struct ActivityView: View {
             ForEach(top, id: \.game.id) { item in
                 HStack(spacing: 12) {
                     Thumb(game: item.game)
-                    Text(item.game.name)
+                    Text(lib.displayName(item.game))
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(Color.kText)
                         .lineLimit(1)
@@ -139,7 +161,7 @@ struct ActivityView: View {
         let live = lib.openSessions[s.gameID] == s.id
         return HStack(spacing: 12) {
             if let game { Thumb(game: game) }
-            Text(game?.name ?? "Removed game")
+            Text(game.map(lib.displayName) ?? "Removed game")
                 .font(.system(size: 13))
                 .foregroundStyle(Color.kText)
                 .lineLimit(1)

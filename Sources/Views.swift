@@ -65,6 +65,8 @@ struct ContentView: View {
         case .vndb(let id): VNDBSheet(id: id).environmentObject(lib)
         case .newCollection(let id): NewCollectionSheet(id: id).environmentObject(lib)
         case .discover(let r): DiscoverSheet(result: r, open: { sheet = $0 }).environmentObject(lib)
+        case .wine(let g): WineTrySheet(game: g).environmentObject(lib)
+        case .review(let y): YearReviewSheet(year: y, open: { sheet = $0 }).environmentObject(lib)
         }
     }
 
@@ -74,6 +76,8 @@ struct ContentView: View {
         if env["VNLIB_MODE"] == "couch" { couch = true }
         if env["VNLIB_MODE"] == "settings" { showSettings = true }
         if env["VNLIB_MODE"] == "discover" { mode = .discover }
+        if env["VNLIB_MODE"] == "review" { mode = .activity; sheet = .review(Library.calendar.component(.year, from: Date())) }
+        if env["VNLIB_MODE"] == "wine", let g = lib.games.first(where: { $0.kind == .siglus }) { sheet = .wine(g) }
         // Open the first game's info page after VNDB has answered.
         if env["VNLIB_OPEN_INFO"] != nil {
             try? await Task.sleep(for: .seconds(2.5))
@@ -114,6 +118,11 @@ struct ContentView: View {
             loadFileURLs(providers) { add($0) }
             return true
         }
+    }
+
+    private var engineUpdateAvailable: Bool {
+        if case .available = lib.engineUpdate { return true }
+        return false
     }
 
     private func pickRandom() {
@@ -179,7 +188,12 @@ struct ContentView: View {
                        help: lib.discreet ? "Discreet mode is on (⌘⇧D)" : "Discreet mode (⌘⇧D)",
                        active: lib.discreet) { lib.discreet.toggle() }
             IconButton(symbol: "plus", help: "Add games (⌘O)") { chooseGames() }
-            IconButton(symbol: "gearshape", help: "Settings") { showSettings = true }
+            IconButton(symbol: "gearshape", help: engineUpdateAvailable ? "Settings — a siglus_engine update is available" : "Settings") { showSettings = true }
+                .overlay(alignment: .topTrailing) {
+                    if engineUpdateAvailable {
+                        Circle().fill(Color.kAccent).frame(width: 9, height: 9).offset(x: 2, y: -2)
+                    }
+                }
         }
         .padding(.horizontal, 24)
         .padding(.top, 34)
@@ -369,7 +383,7 @@ struct CoverView: View {
                         Color.black.opacity(0.25)
                         VStack(spacing: 10) {
                             Image(systemName: "eye.slash").font(.system(size: 24))
-                            Text(game.name)
+                            Text(lib.displayName(game))
                                 .font(.system(size: 14, weight: .semibold))
                                 .multilineTextAlignment(.center)
                         }
@@ -379,7 +393,7 @@ struct CoverView: View {
                 } else {
                     LinearGradient(colors: [Color(hex: 0x3B2370), Color(hex: 0x1D1D21)],
                                    startPoint: .topLeading, endPoint: .bottomTrailing)
-                    Text(game.name)
+                    Text(lib.displayName(game))
                         .font(.system(size: 17, weight: .bold))
                         .multilineTextAlignment(.center)
                         .foregroundStyle(Color.kText)
@@ -492,7 +506,7 @@ struct GameCard: View {
             .onDrop(of: [.fileURL], delegate: CoverDrop(id: game.id, lib: lib, targeted: $coverDrop))
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(game.name)
+                Text(lib.displayName(game))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Color.kText)
                     .lineLimit(2, reservesSpace: true)
@@ -516,6 +530,9 @@ struct GameCard: View {
             Divider()
             TrackingMenus(game: game, open: open)
             Divider()
+            if game.installed && game.kind != .macApp {
+                Button("Try with Whisky / CrossOver…") { open(.wine(game)) }
+            }
             Button("Show in Finder") {
                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: game.path)])
             }
@@ -528,8 +545,9 @@ struct GameCard: View {
     private var subtitle: String {
         if isRunning { return "Running now" }
         if lib.fetching.contains(game.id) { return "Fetching from VNDB…" }
-        guard game.lastPlayed != nil else { return Format.lastPlayed(nil) }
-        return "\(Format.lastPlayed(game.lastPlayed)) · \(Format.playtime(game.playSeconds))"
+        let routes = lib.routeProgress(game).map { " · " + $0 } ?? ""
+        guard game.lastPlayed != nil else { return Format.lastPlayed(nil) + routes }
+        return "\(Format.lastPlayed(game.lastPlayed)) · \(Format.playtime(game.playSeconds))" + routes
     }
 
     private func chooseCover() {
@@ -585,6 +603,10 @@ struct EditSheet: View {
                 HStack {
                     TextField(game.kind == .macApp ? "App" : "Folder", text: $game.path)
                     Button("Choose…") { choosePath() }
+                }
+                Section("Open alongside this game") {
+                    CompanionList(paths: Binding(get: { game.companions ?? [] },
+                                                 set: { game.companions = $0.isEmpty ? nil : $0 }))
                 }
                 if game.kind == .command {
                     TextField("Command", text: $game.command, axis: .vertical)
@@ -664,6 +686,7 @@ struct SettingsSheet: View {
                     Label(lib.engineFound ? "Found" : "Not found at that path",
                           systemImage: lib.engineFound ? "checkmark.circle.fill" : "xmark.circle.fill")
                         .foregroundStyle(lib.engineFound ? Color.kDone : Color.kHinomaru)
+                    EngineUpdateRow()
                 } header: {
                     Text("Siglus engine")
                 } footer: {
@@ -673,6 +696,22 @@ struct SettingsSheet: View {
                     Toggle("Fetch cover and info from VNDB when a game is added", isOn: $lib.autoVNDB)
                     Toggle("Show sexual-content tags (pink)", isOn: $lib.showEroTags)
                     Toggle("Blur images VNDB flags as suggestive (Discover, galleries)", isOn: $lib.blurSuggestive)
+                }
+                Section("Japanese") {
+                    Toggle("Show original Japanese titles (from VNDB)", isOn: $lib.japaneseTitles)
+                    JitenKeyRow()
+                }
+                Section {
+                    CompanionList(paths: $lib.globalCompanions)
+                } header: {
+                    Text("Open alongside every game")
+                } footer: {
+                    Text("E.g. Meikipop for OCR lookups. They're closed again when the game quits, unless they were already open. Add apps for a single game under Edit.")
+                }
+                Section("Goal") {
+                    Stepper(value: $lib.weeklyGoal, in: 0...80, step: 1) {
+                        Text(lib.weeklyGoal == 0 ? "Weekly play goal: off" : "Weekly play goal: \(Int(lib.weeklyGoal)) hours")
+                    }
                 }
                 Section {
                     Toggle("Discreet mode", isOn: $lib.discreet)
@@ -712,9 +751,11 @@ extension Notification.Name {
 }
 
 enum SheetKind: Identifiable {
-    case edit(Game), info(UUID), vndb(UUID), newCollection(UUID), discover(VNDB.Result)
+    case edit(Game), info(UUID), vndb(UUID), newCollection(UUID), discover(VNDB.Result), wine(Game), review(Int)
     var id: String {
         switch self {
+        case .wine(let g): return "wine-\(g.id)"
+        case .review(let y): return "review-\(y)"
         case .discover(let r): return "discover-\(r.id)"
         case .newCollection(let id): return "collection-\(id)"
         case .edit(let g): return "edit-\(g.id)"

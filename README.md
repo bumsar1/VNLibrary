@@ -48,6 +48,13 @@ Or build it yourself (needs Xcode):
 - **Progress** — play time against VNDB's estimated length on each game's page
 - **Discover** — search and browse all of VNDB (best match, highest rated, most popular, newest). Add anything to your library as *Plan to play*; when you later drop in its game folder, it's linked to that entry automatically
 - **Image gallery** — every screenshot and package scan VNDB has for a game, on its page and in Discover. Click for a large view, step through with the arrow keys, and use any image as the cover
+- **jiten.moe** — length in characters, difficulty, unique words and kanji for each VN, and with a jiten.moe API key how much of its vocabulary you already know
+- **Japanese titles** — show VNDB's original titles (e.g. グリザイアの果実) instead of romaji
+- **Routes** — the heroines from VNDB as a checklist with portraits; tick off cleared routes, add your own (e.g. a true ending). Cards show "2/8 routes"
+- **Companion apps** — open apps like Meikipop alongside every game, or a single one; they close again when the game quits
+- **Weekly goal and Year in Review** — a goal ring on the Activity tab, and a yearly summary: hours, days played, longest streak, best day, months, most played and finished games
+- **Try with Whisky / CrossOver** — run a game's .exe through one of your Wine bottles (with a Japanese locale) to see if it plays well, and keep the setup if it does
+- **siglus_engine updates** — checks GitHub for a newer siglus_rs and pulls + rebuilds it with one click
 - **Status, rating and notes** — Playing / Finished / On hold / Dropped / Plan to play, your own 1–10 rating and notes per game. Starting a game marks it as Playing
 - **VNDB list sync** — connect your VNDB account (API token, kept in the keychain) and status, rating, notes and dates are sent to your list as you change them; import your existing list in one click
 - **Collections** — your own groups, e.g. "Key games"

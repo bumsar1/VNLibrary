@@ -36,6 +36,10 @@ struct Game: Codable, Identifiable, Equatable {
     var started: Date?
     var finished: Date?
     var adult: Bool?              // nil = decide from VNDB's sexual-content tags
+    var jiten: JitenInfo?
+    var companions: [String]?     // apps opened alongside this game
+    var routes: [Route]?
+    var routesDone: [String]?
     var isAdult: Bool { adult ?? !(vndb?.eroTags ?? []).isEmpty }
     /// Added from Discover without a game folder or app yet.
     var installed: Bool { !path.isEmpty }
@@ -82,6 +86,20 @@ final class Library: ObservableObject {
     }
     /// VNDB images the user chose to show this session.
     @Published var revealed: Set<String> = []
+    @Published var japaneseTitles: Bool {
+        didSet { UserDefaults.standard.set(japaneseTitles, forKey: "japaneseTitles") }
+    }
+    /// Weekly play goal in hours; 0 turns it off.
+    @Published var weeklyGoal: Double {
+        didSet { UserDefaults.standard.set(weeklyGoal, forKey: "weeklyGoal") }
+    }
+    /// Apps opened alongside every game.
+    @Published var globalCompanions: [String] {
+        didSet { UserDefaults.standard.set(globalCompanions, forKey: "globalCompanions") }
+    }
+    /// Companion apps VN Library started, per running game, so only those get closed.
+    var launchedCompanions: [UUID: [NSRunningApplication]] = [:]
+    @Published var engineUpdate: EngineUpdate.Status = .unknown
     @Published var vndbUser: String? {
         didSet { UserDefaults.standard.set(vndbUser, forKey: "vndbUser") }
     }
@@ -124,12 +142,22 @@ final class Library: ObservableObject {
         showEroTags = UserDefaults.standard.object(forKey: "showEroTags") as? Bool ?? true
         discreet = UserDefaults.standard.bool(forKey: "discreet")
         blurSuggestive = UserDefaults.standard.object(forKey: "blurSuggestive") as? Bool ?? true
+        japaneseTitles = UserDefaults.standard.bool(forKey: "japaneseTitles")
+        weeklyGoal = UserDefaults.standard.object(forKey: "weeklyGoal") as? Double ?? 0
+        globalCompanions = UserDefaults.standard.stringArray(forKey: "globalCompanions") ?? []
         vndbUser = UserDefaults.standard.string(forKey: "vndbUser")
         vndbUsername = UserDefaults.standard.string(forKey: "vndbUsername")
         load()
         loadSessions()
         if ProcessInfo.processInfo.environment["VNLIB_NO_VNDB"] == nil {
             refreshVNDB(onlyOutdated: true)
+            // Fill in what older entries are missing: jiten.moe stats and routes.
+            let linked = games.filter { $0.vndb != nil }
+            Task {
+                for g in linked where g.jiten == nil { await fetchJiten(g.id) }
+                for g in linked where g.routes == nil { await fetchRoutes(g.id) }
+            }
+            if games.contains(where: { $0.kind == .siglus }) { checkEngine() }
         }
 
         NSWorkspace.shared.notificationCenter.addObserver(
@@ -410,6 +438,7 @@ final class Library: ObservableObject {
         }
         guard let i = games.firstIndex(where: { $0.id == id }) else { return }
         games[i].vndb = result.info
+        Task { await fetchJiten(id); await fetchRoutes(id) }
         // VNDB flags suggestive covers; hide those unless the user chose otherwise.
         if result.explicitCover && games[i].blurCover == nil { games[i].blurCover = true }
         if rename { games[i].name = result.title }
@@ -619,6 +648,7 @@ final class Library: ObservableObject {
         }
         beginSession(id)
         markPlayingIfNew(id)
+        startCompanions(id)
     }
 
     private func finished(_ id: UUID, status: Int32, log: URL?) {
@@ -626,6 +656,7 @@ final class Library: ObservableObject {
         guard let start = running.removeValue(forKey: id) else { return }
         let elapsed = Date().timeIntervalSince(start)
         endSession(id)     // adds the active time to the game's total
+        stopCompanions(id)
         guard let i = games.firstIndex(where: { $0.id == id }) else { return }
         // A quick non-zero exit means the game never really ran: show why.
         if status != 0, elapsed < 10 {

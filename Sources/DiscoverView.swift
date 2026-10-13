@@ -171,7 +171,7 @@ struct DiscoverCard: View {
                 .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(hover ? Color.kAccent : Color.kLine))
                 .scaleEffect(hover ? 1.02 : 1)
                 .animation(.easeOut(duration: 0.15), value: hover)
-            Text(result.title)
+            Text(lib.japaneseTitles ? (result.alttitle ?? result.title) : result.title)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Color.kText)
                 .lineLimit(2, reservesSpace: true)
@@ -194,6 +194,7 @@ struct DiscoverSheet: View {
     @State private var adding = false
     @State private var gallery: [GalleryImage] = []
     @State private var viewing: Int?
+    @State private var jiten: JitenInfo?
 
     var body: some View {
         let info = result.info
@@ -223,6 +224,7 @@ struct DiscoverSheet: View {
                     }
                 }
                 FlowChips(items: facts(info))
+                if let jiten { JitenLine(info: jiten) }
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
                         GalleryStrip(vid: result.id, viewing: $viewing, images: $gallery)
@@ -280,6 +282,7 @@ struct DiscoverSheet: View {
         .frame(width: 820, height: 580)
         .background(Color.kPanel)
         .overlay { GalleryViewer(images: gallery, index: $viewing, gameID: owned?.id) }
+        .task { jiten = await Jiten.info(vndb: result.id, name: result.title) }
     }
 
     private func facts(_ info: VNInfo) -> [String] {

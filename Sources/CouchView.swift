@@ -55,7 +55,7 @@ struct CouchView: View {
 
     private func details(_ game: Game) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(game.name)
+            Text(lib.displayName(game))
                 .font(.system(size: 40, weight: .bold))
                 .foregroundStyle(.white)
                 .lineLimit(2)

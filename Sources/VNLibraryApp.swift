@@ -23,6 +23,7 @@ struct VNLibraryApp: App {
                 .keyboardShortcut("o", modifiers: .command)
                 Button("Fetch Missing from VNDB") { Library.shared.fetchMissingVNDB() }
                 Button("Update VNDB Data (Tags etc.)") { Library.shared.refreshVNDB() }
+                Button("Update jiten.moe Data") { Library.shared.refreshJitenAll() }
             }
             CommandGroup(after: .sidebar) {
                 Button("Discreet Mode") { Library.shared.discreet.toggle() }

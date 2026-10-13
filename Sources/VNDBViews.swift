@@ -35,11 +35,13 @@ struct InfoSheet: View {
 
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(game.name)
+                    Text(lib.displayName(game))
                         .font(.system(size: 22, weight: .bold))
                         .foregroundStyle(Color.kText)
                         .textSelection(.enabled)
-                    if let alt = info?.alttitle, !alt.isEmpty {
+                    if lib.displayName(game) != game.name {
+                        Text(game.name).font(.system(size: 14)).foregroundStyle(Color.kMuted).textSelection(.enabled)
+                    } else if let alt = info?.alttitle, !alt.isEmpty {
                         Text(alt).font(.system(size: 14)).foregroundStyle(Color.kMuted).textSelection(.enabled)
                     } else if let t = info?.title, t != game.name {
                         Text(t).font(.system(size: 14)).foregroundStyle(Color.kMuted)
@@ -47,6 +49,7 @@ struct InfoSheet: View {
                 }
 
                 FlowChips(items: facts(game))
+                if let j = game.jiten { JitenLine(info: j) }
 
                 // Description, tags and notes share one scroll area so a long
                 // tag list never pushes the rest off the page.
@@ -55,6 +58,7 @@ struct InfoSheet: View {
                         if let vid = info?.id {
                             GalleryStrip(vid: vid, viewing: $viewing, images: $gallery)
                         }
+                        RoutesSection(game: game)
                         if let info {
                             Text(info.description ?? "No description on VNDB.")
                                 .font(.system(size: 13))
