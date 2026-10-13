@@ -488,9 +488,9 @@ struct ReadFilter {
     static let defaultWords = """
     セーブ ロード クイックセーブ クイックロード Qセーブ Qロード オート オートモード スキップ 既読スキップ 未読スキップ
     ログ バックログ 履歴 メッセージ履歴 コンフィグ 設定 環境設定 システム オプション メニュー タイトル タイトルへ タイトルに戻る
-    終了 ゲーム終了 はい いいえ 決定 キャンセル 戻る 閉じる 次へ 前へ ボイス 音声 音量 ウィンドウ 全画面 フルスクリーン
-    画面 ヘルプ はじめから 始めから つづきから 続きから おまけ 鑑賞 回想 ギャラリー CGモード シーン回想 音楽鑑賞
-    スクリーンショット 消去 削除 上書き 上書きしますか ページ 名前 日付 データ NODATA NO DATA
+    ゲーム終了 キャンセル ボイス 音量 ウィンドウ 全画面 フルスクリーン
+    ヘルプ はじめから 始めから つづきから 続きから おまけ 鑑賞 回想 ギャラリー CGモード シーン回想 音楽鑑賞
+    スクリーンショット 上書きしますか ページ データ NODATA NO DATA
     SAVE LOAD QSAVE QLOAD QUICKSAVE QUICKLOAD AUTO SKIP LOG BACKLOG BACK CONFIG SYSTEM OPTION OPTIONS MENU TITLE
     EXIT QUIT CLOSE VOICE LOCK RECORD TWITTER HIDE NEXT PREV START CONTINUE EXTRA EXTRAS GALLERY YES NO OK CANCEL
     NEW GAME NEWGAME SETTINGS HELP FULLSCREEN WINDOW SCREENSHOT
@@ -501,12 +501,19 @@ struct ReadFilter {
 
     static func current() -> ReadFilter {
         let d = UserDefaults.standard
+        // A list saved without being edited (an older Done button did that) just
+        // freezes old defaults; drop it so improvements to the defaults apply.
+        if d.object(forKey: "readIgnoreWords") != nil && !d.bool(forKey: "readIgnoreWordsEdited") {
+            d.removeObject(forKey: "readIgnoreWords")
+        }
         let list = d.stringArray(forKey: "readIgnoreWords") ?? defaultWords
         return ReadFilter(words: Set(list.map { ReadLog.normalize($0).uppercased() }.filter { !$0.isEmpty }),
                           japaneseOnly: d.object(forKey: "readJapaneseOnly") as? Bool ?? true)
     }
 
     func ignores(raw: String, normalized n: String) -> Bool {
+        // Text in dialogue brackets is speech: 「はい」 always counts, whatever the list says.
+        if raw.contains(where: { "「」『』（）".contains($0) }) { return false }
         // A line without kana or kanji is a button, a date or a number.
         if japaneseOnly && !n.unicodeScalars.contains(where: { (0x3041...0x30FF).contains($0.value) || (0x4E00...0x9FFF).contains($0.value) }) {
             return true
@@ -533,21 +540,25 @@ struct ReadFilterSettings: View {
         HStack {
             Text("Words that never count: \(words.count) (セーブ, ロード, オート, SAVE …)")
             Spacer()
-            Button(editing ? "Done" : "Edit…") {
-                if editing { UserDefaults.standard.set(words, forKey: "readIgnoreWords") }
-                editing.toggle()
-            }
+            Button(editing ? "Done" : "Edit…") { editing.toggle() }
         }
         if editing {
             TextEditor(text: $text)
                 .font(.system(size: 12, design: .monospaced))
                 .frame(height: 160)
-                .onChange(of: text) { _, _ in UserDefaults.standard.set(words, forKey: "readIgnoreWords") }
+                .onChange(of: text) { _, _ in
+                    UserDefaults.standard.set(words, forKey: "readIgnoreWords")
+                    UserDefaults.standard.set(true, forKey: "readIgnoreWordsEdited")
+                }
             HStack {
                 Text("One word or phrase per line. Matches whole lines only, so ログ won't remove sentences containing it.")
                     .font(.system(size: 11)).foregroundStyle(.secondary)
                 Spacer()
-                Button("Reset to Defaults") { text = ReadFilter.defaultWords.joined(separator: "\n") }
+                Button("Reset to Defaults") {
+                    text = ReadFilter.defaultWords.joined(separator: "\n")
+                    UserDefaults.standard.removeObject(forKey: "readIgnoreWords")
+                    UserDefaults.standard.removeObject(forKey: "readIgnoreWordsEdited")
+                }
             }
         }
     }
