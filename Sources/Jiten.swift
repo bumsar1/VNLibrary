@@ -117,6 +117,33 @@ enum Jiten {
     }
 }
 
+extension Jiten {
+    /// VNDB ids of the easiest VNs on jiten.moe: sorted by how much of their
+    /// vocabulary you know when there's an API key, else by difficulty.
+    static func easiestIDs(limit: Int = 30) async -> [String] {
+        let sort = key != nil ? "sortBy=coverage&sortOrder=1" : "sortBy=difficulty&sortOrder=0"
+        guard let obj = try? await get("/media-deck/get-media-decks?mediaType=7&\(sort)&charCountMin=50000") as? [String: Any],
+              let rows = obj["data"] as? [[String: Any]] else { return [] }
+        var ids: [String] = []
+        for r in rows {
+            for l in (r["links"] as? [[String: Any]]) ?? [] where (l["linkType"] as? Int) == 2 {
+                if let url = l["url"] as? String, let v = url.split(separator: "/").last, v.hasPrefix("v"), !ids.contains(String(v)) {
+                    ids.append(String(v))
+                }
+            }
+            if ids.count >= limit { break }
+        }
+        return ids
+    }
+
+    /// The easiest VNs as full VNDB results, in jiten's order.
+    static func easiestVNs() async -> [VNDB.Result] {
+        let ids = await easiestIDs()
+        let found = await VNDB.byIDs(ids)
+        return ids.compactMap { id in found.first { $0.id == id } }
+    }
+}
+
 extension Library {
     /// Fetches jiten.moe stats for one game (quietly; many VNs aren't there).
     func fetchJiten(_ id: UUID) async {

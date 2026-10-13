@@ -42,6 +42,9 @@ struct VNLibraryApp: App {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // The default cache (a few MB) is far too small for cover-heavy views:
+        // Discover and couch mode kept downloading the same images again.
+        URLCache.shared = URLCache(memoryCapacity: 128 << 20, diskCapacity: 1 << 30)
         let env = ProcessInfo.processInfo.environment
         // Test hooks (environment, not argv; see the Keiko notes).
         if let add = env["VNLIB_ADD"] {

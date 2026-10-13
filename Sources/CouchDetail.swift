@@ -105,7 +105,7 @@ struct CouchDetailView: View {
 
     private var adult: Bool {
         if let g = game { return g.isAdult }
-        return !(remote?.info.eroTags ?? []).isEmpty
+        return (remote?.hasSexualTags ?? false)
     }
 
     private var title: String {

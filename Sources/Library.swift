@@ -4,11 +4,12 @@ import SwiftUI
 
 /// How a game is started.
 enum LaunchKind: String, Codable, CaseIterable, Identifiable {
-    case siglus, macApp, command
+    case siglus, reallive, macApp, command
     var id: String { rawValue }
     var label: String {
         switch self {
         case .siglus: return "Siglus (siglus_engine)"
+        case .reallive: return "RealLive / AVG32 (game_launcher_run)"
         case .macApp: return "Mac app"
         case .command: return "Custom command"
         }
@@ -40,13 +41,16 @@ struct Game: Codable, Identifiable, Equatable {
     var companions: [String]?     // apps opened alongside this game
     var routes: [Route]?
     var routesDone: [String]?
+    var engine: VNEngine?
+    var saveFolder: String?       // set by hand when it isn't found automatically
+    var sizeBytes: Int64?
     var isAdult: Bool { adult ?? !(vndb?.eroTags ?? []).isEmpty }
     /// Added from Discover without a game folder or app yet.
     var installed: Bool { !path.isEmpty }
 }
 
 enum SortOrder: String, CaseIterable, Identifiable {
-    case recent, name, added, rating
+    case recent, name, added, rating, size
     var id: String { rawValue }
     var label: String {
         switch self {
@@ -54,6 +58,7 @@ enum SortOrder: String, CaseIterable, Identifiable {
         case .name: return "Name"
         case .added: return "Recently added"
         case .rating: return "My rating"
+        case .size: return "Size on disk"
         }
     }
 }
@@ -93,6 +98,13 @@ final class Library: ObservableObject {
     @Published var weeklyGoal: Double {
         didSet { UserDefaults.standard.set(weeklyGoal, forKey: "weeklyGoal") }
     }
+    /// New games in this folder are added automatically.
+    @Published var watchFolder: String? {
+        didSet { UserDefaults.standard.set(watchFolder, forKey: "watchFolder"); scanWatchFolder() }
+    }
+    var watchTimer: Timer?
+    /// False until library.json is read; nothing may save before that.
+    private(set) var loaded = false
     /// Apps opened alongside every game.
     @Published var globalCompanions: [String] {
         didSet { UserDefaults.standard.set(globalCompanions, forKey: "globalCompanions") }
@@ -145,10 +157,28 @@ final class Library: ObservableObject {
         japaneseTitles = UserDefaults.standard.bool(forKey: "japaneseTitles")
         weeklyGoal = UserDefaults.standard.object(forKey: "weeklyGoal") as? Double ?? 0
         globalCompanions = UserDefaults.standard.stringArray(forKey: "globalCompanions") ?? []
+        // Set through the wrapper so didSet doesn't run here: it would save the
+        // value and scan the folder before the library is loaded, and the
+        // scan's save would then replace library.json with only those games.
+        _watchFolder = Published(initialValue: ProcessInfo.processInfo.environment["VNLIB_WATCH"]
+                                 ?? UserDefaults.standard.string(forKey: "watchFolder"))
         vndbUser = UserDefaults.standard.string(forKey: "vndbUser")
         vndbUsername = UserDefaults.standard.string(forKey: "vndbUsername")
         load()
+        loaded = true
         loadSessions()
+        detectEngines()
+        if ProcessInfo.processInfo.environment["VNLIB_NO_VNDB"] == nil {
+            measureSizes()
+            scanWatchFolder()
+            // The watched folder is checked every minute and whenever VN Library comes forward.
+            watchTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.scanWatchFolder() }
+            }
+            NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.scanWatchFolder() }
+            }
+        }
         if ProcessInfo.processInfo.environment["VNLIB_NO_VNDB"] == nil {
             refreshVNDB(onlyOutdated: true)
             // Fill in what older entries are missing: jiten.moe stats and routes.
@@ -183,6 +213,7 @@ final class Library: ObservableObject {
     }
 
     func save() {
+        guard loaded else { return }
         let enc = JSONEncoder()
         enc.dateEncodingStrategy = .iso8601
         enc.outputFormatting = [.prettyPrinted, .sortedKeys]
@@ -217,6 +248,8 @@ final class Library: ObservableObject {
             return list.sorted { ($0.lastPlayed ?? $0.added) > ($1.lastPlayed ?? $1.added) }
         case .rating:
             return list.sorted { ($0.userRating ?? 0, $1.name) > ($1.userRating ?? 0, $0.name) }
+        case .size:
+            return list.sorted { ($0.sizeBytes ?? 0) > ($1.sizeBytes ?? 0) }
         }
     }
 
@@ -249,9 +282,12 @@ final class Library: ObservableObject {
             let path = url.standardizedFileURL.path
             if games.contains(where: { $0.path == path }) { continue }
             var game = detect(url)
+            if game.kind != .macApp { game.engine = VNEngine.detect(game.path) }
+            if game.engine == .reallive { game.kind = .reallive }
             if let src = findCoverSource(for: game) { game.cover = importCover(from: src, id: game.id) }
             games.append(game)
             if game.kind == .command { unknown.append(game) }
+            measureSizes()
             if autoVNDB && ProcessInfo.processInfo.environment["VNLIB_NO_VNDB"] == nil {
                 autoMatch(game.id)
             }
@@ -529,6 +565,7 @@ final class Library: ObservableObject {
     }
 
     func remove(_ id: UUID) {
+        if let g = games.first(where: { $0.id == id }) { rememberRemoved(g.path) }
         if let cover = games.first(where: { $0.id == id })?.cover {
             try? FileManager.default.removeItem(at: coversDir.appendingPathComponent(cover))
         }
@@ -578,7 +615,14 @@ final class Library: ObservableObject {
             alert = "\(game.name) wasn't found:\n\(game.path)\n\nDid you move the folder? Fix the path under Edit."
             return
         }
+        backupSaves(game)
         switch game.kind {
+        case .reallive:
+            guard launcherFound else {
+                alert = "game_launcher_run isn't built yet. Settings → Siglus engine → Build RealLive support."
+                return
+            }
+            run(game, executable: launcherPath, arguments: [game.path], fullScreen: fullScreen)
         case .macApp:
             let cfg = NSWorkspace.OpenConfiguration()
             NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: game.path), configuration: cfg) { app, error in

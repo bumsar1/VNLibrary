@@ -56,6 +56,11 @@ Or build it yourself (needs Xcode):
 - **Weekly goal and Year in Review** — a goal ring on the Activity tab, and a yearly summary: hours, days played, longest streak, best day, months, most played and finished games
 - **Try with Whisky / CrossOver** — run a game's .exe through one of your Wine bottles (with a Japanese locale) to see if it plays well, and keep the setup if it does
 - **siglus_engine updates** — checks GitHub for a newer siglus_rs and pulls + rebuilds it with one click
+- **Engine detection** — recognises SiglusEngine, RealLive/AVG32, KiriKiri, Ren'Py, NScripter, TyranoScript, RPG Maker, Unity and more, and says what runs each natively on a Mac. Key's older RealLive / AVG32 games run with siglus_rs's `game_launcher_run` (built from Settings)
+- **Save backups** — the save folder is copied before every session when it changed (newest 15 kept), with one-click restore
+- **Watched folder** — new game folders that appear there are added automatically
+- **Disk usage** — size of each game, sort by size, and *Move Game Files to Trash* that keeps the game (status, notes, play time) as Not installed
+- **Easiest for you** — jiten.moe's VNs sorted by how much of the vocabulary you know (with an API key) or by difficulty, in Discover and couch mode
 - **Status, rating and notes** — Playing / Finished / On hold / Dropped / Plan to play, your own 1–10 rating and notes per game. Starting a game marks it as Playing
 - **VNDB list sync** — connect your VNDB account (API token, kept in the keychain) and status, rating, notes and dates are sent to your list as you change them; import your existing list in one click
 - **Collections** — your own groups, e.g. "Key games"

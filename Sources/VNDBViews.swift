@@ -9,6 +9,7 @@ struct InfoSheet: View {
     let open: (SheetKind) -> Void
     let filterTag: (String) -> Void
     @State private var notes = ""
+    @State private var confirmTrash = false
     @State private var gallery: [GalleryImage] = []
     @State private var viewing: Int?
 
@@ -53,6 +54,12 @@ struct InfoSheet: View {
                 }
                 FlowChips(items: facts(game))
                 if let j = game.jiten { JitenLine(info: j) }
+                if let e = game.engine, e != .unknown, lib.exists(game), game.kind == .command || !e.native || e == .reallive && game.kind != .reallive {
+                    // How this engine plays on a Mac, when it isn't already set up natively.
+                    Label("\(e.name): \(e.hint)", systemImage: e.native ? "macwindow" : "info.circle")
+                        .font(.system(size: 11)).foregroundStyle(e.native ? Color.kDone : Color.kMuted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
 
                 // Description, tags and notes share one scroll area so a long
                 // tag list never pushes the rest off the page.
@@ -134,6 +141,11 @@ struct InfoSheet: View {
                             Button("New Collection…") { open(.newCollection(id)) }
                         }
                         Toggle("Adult Game", isOn: Binding(get: { game.isAdult }, set: { lib.setAdult(id, $0) }))
+                        Divider()
+                        Button("Save Backups…") { open(.backups(id)) }
+                        if game.installed && lib.exists(game) {
+                            Button("Move Game Files to Trash…") { confirmTrash = true }
+                        }
                         Button("Show in Finder") {
                             NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: game.path)])
                         }
@@ -152,6 +164,11 @@ struct InfoSheet: View {
         .frame(width: 780, height: 540)
         .background(Color.kPanel)
         .onAppear { notes = game.notes ?? "" }
+        .confirmationDialog("Move \(game.name)'s files to the Trash?", isPresented: $confirmTrash) {
+            Button("Move to Trash", role: .destructive) { lib.trashFiles(id) }
+        } message: {
+            Text("Frees \(game.sizeBytes.map(Bytes.format) ?? "its space"). The game stays in your library as Not installed, with its status, notes, play time and save backups. You can get the files back from the Trash.")
+        }
         .overlay { GalleryViewer(images: gallery, index: $viewing, gameID: id) }
         .onChange(of: gallery) { _, g in
             if ProcessInfo.processInfo.environment["VNLIB_VIEW_IMAGE"] != nil, !g.isEmpty { viewing = 0 }
@@ -196,6 +213,7 @@ struct InfoSheet: View {
             if let m = info.lengthMinutes, m > 0 { out.append("~\(max(1, Int((Double(m) / 60).rounded()))) hours") }
             if let r = info.rating { out.append("★ " + String(format: "%.2f", r / 10)) }
         }
+        if let b = game.sizeBytes, lib.exists(game) { out.append(Bytes.format(b)) }
         if game.playSeconds > 0 {
             var played = "Played \(Format.playtime(game.playSeconds))"
             // Rough progress against VNDB's estimated length.

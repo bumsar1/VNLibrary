@@ -54,6 +54,9 @@ enum VNDB {
                           eroTags: top(["ero"], 15))
         }
         var year: String? { released.map { String($0.prefix(4)) } }
+        /// Whether VNDB lists sexual-content tags for it. Cheap, unlike building
+        /// `info` (which cleans the description with regexes).
+        var hasSexualTags: Bool { tags.contains { $0.category == "ero" && $0.spoiler == 0 && $0.rating >= 1.5 } }
         /// Covers flagged as more than mildly suggestive are blurred in search results.
         var explicitCover: Bool { (image?.sexual ?? 0) >= 1 }
     }
@@ -61,7 +64,7 @@ enum VNDB {
     private struct Response: Decodable { let results: [Result]; let more: Bool? }
 
     enum BrowseSort: String, CaseIterable, Identifiable {
-        case relevance, rating, votecount, released
+        case relevance, rating, votecount, released, easiest
         var id: String { rawValue }
         var label: String {
             switch self {
@@ -69,6 +72,7 @@ enum VNDB {
             case .rating: return "Highest rated"
             case .votecount: return "Most popular"
             case .released: return "Newest"
+            case .easiest: return "Easiest (jiten.moe)"
             }
         }
     }
@@ -138,6 +142,13 @@ enum VNDB {
         var payload: [String: Any] = ["fields": fields, "results": 30, "sort": sort, "reverse": reverse]
         if !filters.isEmpty { payload["filters"] = filters.count == 1 ? filters[0] : ["and"] + filters }
         return (try? await post(payload).results) ?? []
+    }
+
+    /// Several VNs by id in one request (up to 100).
+    static func byIDs(_ ids: [String]) async -> [Result] {
+        guard !ids.isEmpty else { return [] }
+        let filter: Any = ids.count == 1 ? ["id", "=", ids[0]] : ["or"] + ids.prefix(100).map { ["id", "=", $0] }
+        return (try? await post(["filters": filter, "fields": fields, "results": 100]).results) ?? []
     }
 
     /// Which of these VNs have a release rated 18+.

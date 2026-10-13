@@ -97,21 +97,26 @@ extension Library {
         Task { engineUpdate = await EngineUpdate.check(enginePath: enginePath) }
     }
 
-    /// git pull + cargo build, logged to engine-build.log.
-    func updateEngine() {
+    /// git pull + cargo build, logged to engine-build.log. `pull: false`
+    /// only builds (e.g. to add game_launcher_run to an existing checkout).
+    func updateEngine(pull: Bool = true) {
         guard let repo = EngineUpdate.repo(for: enginePath) else { engineUpdate = .noRepo; return }
         FileManager.default.createFile(atPath: engineLog.path, contents: nil)
         let log = try? FileHandle(forWritingTo: engineLog)
         Task {
-            engineUpdate = .building(step: "Downloading changes…")
-            let (pullStatus, pullOut) = await EngineUpdate.run("/usr/bin/git", ["pull", "--ff-only"], in: repo, log: log)
-            guard pullStatus == 0 else {
-                engineUpdate = .failed("git pull failed: " + (pullOut.split(separator: "\n").last.map(String.init) ?? ""))
-                return
+            if pull {
+                engineUpdate = .building(step: "Downloading changes…")
+                let (pullStatus, pullOut) = await EngineUpdate.run("/usr/bin/git", ["pull", "--ff-only"], in: repo, log: log)
+                guard pullStatus == 0 else {
+                    engineUpdate = .failed("git pull failed: " + (pullOut.split(separator: "\n").last.map(String.init) ?? ""))
+                    return
+                }
             }
             engineUpdate = .building(step: "Building (a few minutes)…")
             let cargo = FileManager.default.homeDirectoryForCurrentUser.path + "/.cargo/bin/cargo"
-            let (status, out) = await EngineUpdate.run(cargo, ["build", "--release", "-p", "siglus_scene_vm", "--bin", "siglus_engine"],
+            // siglus_engine for Siglus games, game_launcher_run for RealLive / AVG32 / UK2.
+            let (status, out) = await EngineUpdate.run(cargo, ["build", "--release", "-p", "siglus_scene_vm", "--bin", "siglus_engine",
+                                                              "-p", "game_launcher", "--bin", "game_launcher_run"],
                                                        in: repo, log: log)
             try? log?.close()
             if status == 0 {
@@ -152,6 +157,12 @@ struct EngineUpdateRow: View {
                 EmptyView()
             } else {
                 Button("Check for Updates") { lib.checkEngine() }
+            }
+            if !lib.launcherFound, EngineUpdate.repo(for: lib.enginePath) != nil {
+                if case .building = lib.engineUpdate {} else {
+                    Button("Build RealLive support") { lib.updateEngine(pull: false) }
+                        .help("Builds game_launcher_run from your siglus_rs checkout, for Key's older RealLive / AVG32 games")
+                }
             }
             if FileManager.default.fileExists(atPath: lib.engineLog.path) {
                 Button("Log") { NSWorkspace.shared.open(lib.engineLog) }

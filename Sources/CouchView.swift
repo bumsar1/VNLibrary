@@ -58,10 +58,20 @@ struct CouchView: View {
     @State private var searchResults: [VNDB.Result] = []
     @State private var detail: Item?                         // the game page that's open
     @State private var detailState = CouchDetailState()
+    @State private var rows: [Row] = []                      // rebuilt only when their inputs change
+    @State private var galleries: [String: [GalleryImage]] = [:]
+    @State private var connectObserver: NSObjectProtocol?
 
     // MARK: Rows
 
-    private var rows: [Row] {
+    /// Recomputing rows on every render was the main cost while moving around;
+    /// they're rebuilt here when the library, search or VNDB rows change.
+    private func rebuildRows() {
+        rows = buildRows()
+        if row >= rows.count { row = max(0, rows.count - 1) }
+    }
+
+    private func buildRows() -> [Row] {
         let games = lib.sorted(.recent, filter: "")
         let installed = games.filter { lib.exists($0) }
         let playing = installed.filter { $0.status == .playing }.map(Item.game)
@@ -87,7 +97,7 @@ struct CouchView: View {
 
     /// Discreet mode leaves adult VNs out of the VNDB rows.
     private func allowed(_ r: VNDB.Result) -> Bool {
-        !(lib.discreet && (adultRemote.contains(r.id) || !(r.info.eroTags ?? []).isEmpty))
+        !(lib.discreet && (adultRemote.contains(r.id) || r.hasSexualTags))
     }
 
     /// What the backdrop and header follow: the open game page, else the focused tile.
@@ -104,8 +114,19 @@ struct CouchView: View {
     // MARK: Body
 
     var body: some View {
+        content
+            .onAppear(perform: rebuildRows)
+            .onChange(of: lib.games) { _, _ in rebuildRows() }
+            .onChange(of: lib.discreet) { _, _ in rebuildRows() }
+            .onChange(of: query) { _, _ in rebuildRows() }
+            .onChange(of: searchResults.map(\.id)) { _, _ in rebuildRows() }
+            .onChange(of: remote.mapValues { $0.count }) { _, _ in rebuildRows() }
+            .onChange(of: adultRemote) { _, _ in if lib.discreet { rebuildRows() } }
+    }
+
+    private var content: some View {
         let list = rows
-        ZStack {
+        return ZStack {
             backdrop
             LinearGradient(colors: [.black.opacity(0.55), .black.opacity(0.2), .black.opacity(0.9)],
                            startPoint: .top, endPoint: .bottom)
@@ -140,7 +161,7 @@ struct CouchView: View {
                 Spacer(minLength: 0)
                 ScrollViewReader { proxy in
                     ScrollView(.vertical, showsIndicators: false) {
-                        VStack(alignment: .leading, spacing: 18) {
+                        LazyVStack(alignment: .leading, spacing: 18) {
                             ForEach(Array(list.enumerated()), id: \.element.id) { ri, r in
                                 rowView(r, focused: ri == row).id(r.id)
                             }
@@ -213,7 +234,7 @@ struct CouchView: View {
     private var backdrop: some View {
         Color.black
             .overlay {
-                if let vid = shown?.vid, let url = backdrops[vid], !lib.discreet {
+                if let vid = shown?.vid, let url = backdrops[vid], !url.isEmpty, !lib.discreet {
                     AsyncImage(url: URL(string: url)) { phase in
                         if let img = phase.image {
                             img.resizable().scaledToFill()
@@ -251,11 +272,18 @@ struct CouchView: View {
         guard let vid = shown?.vid, backdrops[vid] == nil else { return }
         try? await Task.sleep(for: .milliseconds(250))     // don't fetch while scrolling past
         guard !Task.isCancelled, shown?.vid == vid else { return }
-        let images = (try? await VNDB.gallery(for: vid)) ?? []
+        let images = await gallery(vid)
         let limit = lib.blurSuggestive ? 0.5 : 1.5
-        if let shot = images.first(where: { $0.kind == "Screenshot" && $0.sexual < limit }) {
-            backdrops[vid] = shot.url
-        }
+        // "" remembers "no usable screenshot" so it isn't fetched again.
+        backdrops[vid] = images.first(where: { $0.kind == "Screenshot" && $0.sexual < limit })?.url ?? ""
+    }
+
+    /// VNDB images for a VN, fetched once per couch session (backdrop and game page share them).
+    private func gallery(_ vid: String) async -> [GalleryImage] {
+        if let g = galleries[vid] { return g }
+        let g = (try? await VNDB.gallery(for: vid)) ?? []
+        galleries[vid] = g
+        return g
     }
 
     // MARK: Row views
@@ -271,7 +299,7 @@ struct CouchView: View {
             }
             ScrollViewReader { proxy in
                 ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(alignment: .bottom, spacing: 18) {
+                    LazyHStack(alignment: .bottom, spacing: 18) {
                         ForEach(Array(r.items.enumerated()), id: \.element.id) { i, item in
                             tileView(item, row: r, index: i, selected: focused && i == col, focused: focused)
                         }
@@ -323,7 +351,7 @@ struct CouchView: View {
     private func isAdult(_ item: Item) -> Bool {
         switch item {
         case .game(let g): return g.isAdult
-        case .remote(let r): return adultRemote.contains(r.id) || !(r.info.eroTags ?? []).isEmpty
+        case .remote(let r): return adultRemote.contains(r.id) || r.hasSexualTags
         }
     }
 
@@ -388,13 +416,38 @@ struct CouchView: View {
             cats.append(Category(id: "rec", title: "Because you like \(tag.name)",
                                  conditions: [["tag", "=", tag.id], ["votecount", ">=", 30]], sort: "rating", reverse: true))
         }
+        if let extra = await easiestCategory() { cats.insert(extra, at: 1) }
         categories = cats
         let base = DiscoverFilters.load()
-        for c in cats {
-            let results = await VNDB.row(c.conditions, sort: c.sort, reverse: c.reverse, base: base)
-            remote[c.id] = results
-            adultRemote.formUnion(await VNDB.adultIDs(results.map(\.id)))
+        // Reopening couch mode within half an hour reuses the rows already fetched.
+        let key = String(describing: base.conditions)
+        if let cached = CouchCache.shared.rows(for: key) {
+            remote = cached.rows
+            adultRemote = cached.adult
+            return
         }
+        // All rows at once; each appears as soon as its request is back.
+        await withTaskGroup(of: (String, [VNDB.Result], Set<String>).self) { group in
+            for c in cats {
+                group.addTask {
+                    let results = c.id == "easy" ? await Jiten.easiestVNs() :
+                        await VNDB.row(c.conditions, sort: c.sort, reverse: c.reverse, base: base)
+                    return (c.id, results, await VNDB.adultIDs(results.map(\.id)))
+                }
+            }
+            for await (id, results, adult) in group {
+                remote[id] = results
+                adultRemote.formUnion(adult)
+            }
+        }
+        CouchCache.shared.store(remote, adult: adultRemote, for: key)
+    }
+
+    /// "Easiest for you" from jiten.moe: by your known vocabulary with an API
+    /// key, otherwise by jiten's difficulty.
+    private func easiestCategory() async -> Category? {
+        Category(id: "easy", title: Jiten.key != nil ? "Easiest for you (jiten.moe)" : "Easiest to read (jiten.moe)",
+                 conditions: [], sort: "", reverse: false)
     }
 
     /// The most common tag among the games you liked or are into, leaving
@@ -524,7 +577,7 @@ struct CouchView: View {
         withAnimation(.easeInOut(duration: 0.2)) { detail = item }
         if let vid = item.vid {
             Task {
-                let images = (try? await VNDB.gallery(for: vid)) ?? []
+                let images = await gallery(vid)
                 if detail?.id == item.id { detailState.images = images }
             }
         }
@@ -673,7 +726,8 @@ struct CouchView: View {
             }
             return nil
         }
-        NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { note in
+        // Kept so it can be removed: re-entering couch mode used to stack observers.
+        connectObserver = NotificationCenter.default.addObserver(forName: .GCControllerDidConnect, object: nil, queue: .main) { note in
             if let c = note.object as? GCController { MainActor.assumeIsolated { attach(c) } }
         }
         GCController.controllers().forEach(attach)
@@ -702,6 +756,8 @@ struct CouchView: View {
     private func stop() {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
+        if let connectObserver { NotificationCenter.default.removeObserver(connectObserver) }
+        connectObserver = nil
         GCController.stopWirelessControllerDiscovery()
         for c in GCController.controllers() {
             guard let pad = c.extendedGamepad else { continue }
@@ -711,5 +767,21 @@ struct CouchView: View {
             }
             pad.leftThumbstick.valueChangedHandler = nil
         }
+    }
+}
+
+/// VNDB rows kept between couch-mode sessions for a while.
+@MainActor
+final class CouchCache {
+    static let shared = CouchCache()
+    private var entry: (key: String, at: Date, rows: [String: [VNDB.Result]], adult: Set<String>)?
+
+    func rows(for key: String) -> (rows: [String: [VNDB.Result]], adult: Set<String>)? {
+        guard let e = entry, e.key == key, Date().timeIntervalSince(e.at) < 30 * 60 else { return nil }
+        return (e.rows, e.adult)
+    }
+
+    func store(_ rows: [String: [VNDB.Result]], adult: Set<String>, for key: String) {
+        entry = (key, Date(), rows, adult)
     }
 }

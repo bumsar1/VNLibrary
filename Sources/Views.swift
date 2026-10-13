@@ -72,6 +72,7 @@ struct ContentView: View {
         case .discover(let r): DiscoverSheet(result: r, open: { sheet = $0 }).environmentObject(lib)
         case .wine(let g): WineTrySheet(game: g).environmentObject(lib)
         case .review(let y): YearReviewSheet(year: y, open: { sheet = $0 }).environmentObject(lib)
+        case .backups(let id): BackupsSheet(id: id).environmentObject(lib)
         }
     }
 
@@ -646,6 +647,23 @@ struct EditSheet: View {
                     TextField(game.kind == .macApp ? "App" : "Folder", text: $game.path)
                     Button("Choose…") { choosePath() }
                 }
+                Section("Saves") {
+                    HStack {
+                        Text(game.saveFolder ?? lib.saveFolder(for: game)?.path ?? "Not found — choose the save folder")
+                            .font(.system(size: 11, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                        Spacer()
+                        Button("Choose…") {
+                            let panel = NSOpenPanel()
+                            panel.canChooseDirectories = true
+                            panel.canChooseFiles = false
+                            if game.installed { panel.directoryURL = URL(fileURLWithPath: game.path) }
+                            if panel.runModal() == .OK, let u = panel.url { game.saveFolder = u.path }
+                        }
+                        if game.saveFolder != nil { Button("Auto") { game.saveFolder = nil } }
+                    }
+                }
                 Section("Open alongside this game") {
                     CompanionList(paths: Binding(get: { game.companions ?? [] },
                                                  set: { game.companions = $0.isEmpty ? nil : $0 }))
@@ -686,6 +704,8 @@ struct EditSheet: View {
         switch game.kind {
         case .siglus:
             return "Runs the folder with siglus_engine, which scales the game to fill the window. Set the path to siglus_engine in Settings."
+        case .reallive:
+            return "Runs Key's older RealLive / AVG32 games natively with game_launcher_run from siglus_rs (Settings → Build RealLive support)."
         case .macApp:
             return "Opens a regular Mac app, e.g. a Ren'Py port or a CrossOver shortcut."
         case .command:
@@ -704,6 +724,8 @@ struct EditSheet: View {
         if panel.runModal() == .OK, let url = panel.url {
             game.path = url.standardizedFileURL.path
             if any { game.kind = lib.detectKind(of: url) }
+            game.engine = url.pathExtension.lowercased() == "app" ? nil : VNEngine.detect(url.path)
+            if any, game.engine == .reallive { game.kind = .reallive }
             else if game.kind != .macApp, lib.isSiglus(url) { game.kind = .siglus }
         }
     }
@@ -749,6 +771,28 @@ struct SettingsSheet: View {
                     Text("Open alongside every game")
                 } footer: {
                     Text("E.g. Meikipop for OCR lookups. They're closed again when the game quits, unless they were already open. Add apps for a single game under Edit.")
+                }
+                Section {
+                    HStack {
+                        Text(lib.watchFolder ?? "Off").font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(lib.watchFolder == nil ? .secondary : .primary).lineLimit(1)
+                        Spacer()
+                        Button("Choose…") {
+                            let panel = NSOpenPanel()
+                            panel.canChooseDirectories = true
+                            panel.canChooseFiles = false
+                            panel.prompt = "Watch"
+                            if panel.runModal() == .OK, let u = panel.url { lib.watchFolder = u.standardizedFileURL.path }
+                        }
+                        if lib.watchFolder != nil { Button("Turn Off") { lib.watchFolder = nil } }
+                    }
+                    LabeledContent("Installed games use") {
+                        Text(Bytes.format(lib.totalInstalledBytes))
+                    }
+                } header: {
+                    Text("Library folder")
+                } footer: {
+                    Text("New game folders and apps that appear in the watched folder are added automatically. Games you remove from the library aren't added again.")
                 }
                 Section("Goal") {
                     Stepper(value: $lib.weeklyGoal, in: 0...80, step: 1) {
@@ -798,9 +842,10 @@ extension Notification.Name {
 }
 
 enum SheetKind: Identifiable {
-    case edit(Game), info(UUID), vndb(UUID), newCollection(UUID), discover(VNDB.Result), wine(Game), review(Int)
+    case edit(Game), info(UUID), vndb(UUID), newCollection(UUID), discover(VNDB.Result), wine(Game), review(Int), backups(UUID)
     var id: String {
         switch self {
+        case .backups(let id): return "backups-\(id)"
         case .wine(let g): return "wine-\(g.id)"
         case .review(let y): return "review-\(y)"
         case .discover(let r): return "discover-\(r.id)"

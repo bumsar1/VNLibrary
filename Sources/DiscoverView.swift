@@ -54,7 +54,7 @@ struct DiscoverView: View {
 
     /// 18+ on VNDB (a release rated 18+), or carrying sexual-content tags.
     private func isAdult(_ r: VNDB.Result) -> Bool {
-        adult.contains(r.id) || !(r.info.eroTags ?? []).isEmpty
+        adult.contains(r.id) || r.hasSexualTags
     }
 
     /// Discreet mode leaves out adult VNs; optionally hide what's already owned.
@@ -128,7 +128,9 @@ struct DiscoverView: View {
         defer { loading = false }
         let nextPage = reset ? 1 : page + 1
         do {
-            let r = try await VNDB.browse(query, sort: sort, page: nextPage, filters: filters)
+            // jiten.moe's list is one fixed page, sorted by your vocabulary (or difficulty).
+            let r = sort == .easiest ? (results: nextPage == 1 ? await Jiten.easiestVNs() : [], more: false)
+                : try await VNDB.browse(query, sort: sort, page: nextPage, filters: filters)
             let ids = r.results.map(\.id)
             Task { adult.formUnion(await VNDB.adultIDs(ids)) }
             results = reset ? r.results : results + r.results.filter { n in !results.contains { $0.id == n.id } }
@@ -341,7 +343,7 @@ struct DiscoverSheet: View {
         .overlay { GalleryViewer(images: gallery, index: $viewing, gameID: owned?.id) }
         .task {
             let rated18 = await VNDB.adultIDs([result.id])
-            adult = !(result.info.eroTags ?? []).isEmpty || !rated18.isEmpty
+            adult = result.hasSexualTags || !rated18.isEmpty
             jiten = await Jiten.info(vndb: result.id, name: result.title)
         }
     }
