@@ -101,7 +101,7 @@ struct ContentView: View {
         guard lib.autoCouch, !couch, lib.running.isEmpty, !GCController.controllers().isEmpty else { return }
         sheet = nil
         showSettings = false
-        couch = true
+        setCouch(true)
     }
 
     private func testHooks() async {
@@ -173,10 +173,16 @@ struct ContentView: View {
     /// Couch mode takes the window full screen and leaves it again on exit.
     private func setCouch(_ on: Bool) {
         withAnimation(.easeInOut(duration: 0.25)) { couch = on }
-        if let w = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible }),
-           w.styleMask.contains(.fullScreen) != on {
-            w.toggleFullScreen(nil)
+        matchFullScreen(on, tries: 6)
+    }
+
+    /// At launch the window may not be on screen yet; try again shortly.
+    private func matchFullScreen(_ on: Bool, tries: Int) {
+        guard let w = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.isVisible && $0.canBecomeMain }) else {
+            if tries > 0 { DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { matchFullScreen(on, tries: tries - 1) } }
+            return
         }
+        if w.styleMask.contains(.fullScreen) != on { w.toggleFullScreen(nil) }
     }
 
     private func add(_ urls: [URL]) {
