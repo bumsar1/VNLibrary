@@ -43,10 +43,11 @@ Or build it yourself (needs Xcode):
 - **Drag & drop** — drop game folders or Mac apps into the window (or onto the Dock icon)
 - **VNDB** — cover, description, developer, release year, length, rating and tags are fetched automatically; pick the right entry yourself with *Fetch from VNDB…** if the guess was wrong
 - **Tags** — click a tag on a game's page, or use the **Tags** menu, to filter the library. Sexual-content tags are shown in pink and can be hidden in Settings; spoiler tags are never shown
-- **Blur cover** — per game, from the right-click menu. Covers VNDB flags as suggestive are blurred automatically. The pixels themselves are blurred, so nothing shows through
+- **Blur cover** — per game, from the right-click menu. Images VNDB flags as suggestive are blurred in Discover and galleries with a *Show* button (can be turned off in Settings). Library covers VNDB flags as suggestive are blurred automatically; their pixels are blurred, so nothing shows through
 - **Activity tracker** — every session is logged with its day, start and end time and length. The Activity tab shows today / week / month / all-time totals, your streak, a year-long heatmap of the days you played (click a day to see its sessions), your top games and the full session log. Idle time (no input for 10 minutes) doesn't count
 - **Progress** — play time against VNDB's estimated length on each game's page
 - **Discover** — search and browse all of VNDB (best match, highest rated, most popular, newest). Add anything to your library as *Plan to play*; when you later drop in its game folder, it's linked to that entry automatically
+- **Image gallery** — every screenshot and package scan VNDB has for a game, on its page and in Discover. Click for a large view, step through with the arrow keys, and use any image as the cover
 - **Status, rating and notes** — Playing / Finished / On hold / Dropped / Plan to play, your own 1–10 rating and notes per game. Starting a game marks it as Playing
 - **VNDB list sync** — connect your VNDB account (API token, kept in the keychain) and status, rating, notes and dates are sent to your list as you change them; import your existing list in one click
 - **Collections** — your own groups, e.g. "Key games"

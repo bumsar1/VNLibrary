@@ -672,6 +672,7 @@ struct SettingsSheet: View {
                 Section("VNDB data") {
                     Toggle("Fetch cover and info from VNDB when a game is added", isOn: $lib.autoVNDB)
                     Toggle("Show sexual-content tags (pink)", isOn: $lib.showEroTags)
+                    Toggle("Blur images VNDB flags as suggestive (Discover, galleries)", isOn: $lib.blurSuggestive)
                 }
                 Section {
                     Toggle("Discreet mode", isOn: $lib.discreet)

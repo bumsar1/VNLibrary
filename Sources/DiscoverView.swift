@@ -98,6 +98,8 @@ struct DiscoverView: View {
 struct RemoteCover: View {
     @EnvironmentObject var lib: Library
     let result: VNDB.Result
+    /// Shows a "Show" button on a blurred cover (on the detail page).
+    var revealable = false
 
     var body: some View {
         GeometryReader { geo in
@@ -121,13 +123,22 @@ struct RemoteCover: View {
             .clipped()
             .overlay {
                 if hidden {
-                    Image(systemName: "eye.slash").font(.system(size: 22)).foregroundStyle(.white.opacity(0.85))
+                    VStack(spacing: 10) {
+                        Image(systemName: "eye.slash").font(.system(size: 22))
+                        if revealable && !lib.discreet {
+                            Button("Show") { lib.revealed.insert(key) }
+                                .buttonStyle(.borderedProminent)
+                                .tint(Color.black.opacity(0.5))
+                        }
+                    }
+                    .foregroundStyle(.white.opacity(0.85))
                 }
             }
         }
     }
 
-    private var hidden: Bool { result.explicitCover || lib.discreet }
+    private var key: String { result.image?.url ?? result.id }
+    private var hidden: Bool { lib.shouldBlur(sexual: result.image?.sexual ?? 0, key: key) }
 }
 
 struct DiscoverCard: View {
@@ -181,16 +192,25 @@ struct DiscoverSheet: View {
     let result: VNDB.Result
     let open: (SheetKind) -> Void
     @State private var adding = false
+    @State private var gallery: [GalleryImage] = []
+    @State private var viewing: Int?
 
     var body: some View {
         let info = result.info
         let owned = lib.games.first { $0.vndb?.id == result.id }
         HStack(alignment: .top, spacing: 24) {
-            RemoteCover(result: result)
-                .aspectRatio(3.0 / 4.0, contentMode: .fit)
-                .frame(width: 240)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.kLine))
+            VStack(alignment: .leading, spacing: 8) {
+                RemoteCover(result: result, revealable: true)
+                    .aspectRatio(3.0 / 4.0, contentMode: .fit)
+                    .frame(width: 240)
+                    .clipShape(RoundedRectangle(cornerRadius: 12))
+                    .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Color.kLine))
+                if !lib.discreet, lib.revealed.contains(result.image?.url ?? result.id) {
+                    Button("Blur Again") { lib.revealed.remove(result.image?.url ?? result.id) }
+                        .buttonStyle(.link)
+                        .font(.system(size: 11))
+                }
+            }
 
             VStack(alignment: .leading, spacing: 12) {
                 VStack(alignment: .leading, spacing: 4) {
@@ -205,6 +225,7 @@ struct DiscoverSheet: View {
                 FlowChips(items: facts(info))
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
+                        GalleryStrip(vid: result.id, viewing: $viewing, images: $gallery)
                         Text(info.description ?? "No description on VNDB.")
                             .font(.system(size: 13))
                             .foregroundStyle(Color.kText.opacity(0.9))
@@ -256,8 +277,9 @@ struct DiscoverSheet: View {
             }
         }
         .padding(24)
-        .frame(width: 780, height: 480)
+        .frame(width: 820, height: 580)
         .background(Color.kPanel)
+        .overlay { GalleryViewer(images: gallery, index: $viewing, gameID: owned?.id) }
     }
 
     private func facts(_ info: VNInfo) -> [String] {

@@ -76,6 +76,12 @@ final class Library: ObservableObject {
         didSet { UserDefaults.standard.set(discreet, forKey: "discreet") }
     }
     var syncTasks: [UUID: Task<Void, Never>] = [:]
+    /// Blur VNDB images flagged as suggestive (in Discover and galleries).
+    @Published var blurSuggestive: Bool {
+        didSet { UserDefaults.standard.set(blurSuggestive, forKey: "blurSuggestive") }
+    }
+    /// VNDB images the user chose to show this session.
+    @Published var revealed: Set<String> = []
     @Published var vndbUser: String? {
         didSet { UserDefaults.standard.set(vndbUser, forKey: "vndbUser") }
     }
@@ -117,6 +123,7 @@ final class Library: ObservableObject {
         autoVNDB = UserDefaults.standard.object(forKey: "autoVNDB") as? Bool ?? true
         showEroTags = UserDefaults.standard.object(forKey: "showEroTags") as? Bool ?? true
         discreet = UserDefaults.standard.bool(forKey: "discreet")
+        blurSuggestive = UserDefaults.standard.object(forKey: "blurSuggestive") as? Bool ?? true
         vndbUser = UserDefaults.standard.string(forKey: "vndbUser")
         vndbUsername = UserDefaults.standard.string(forKey: "vndbUsername")
         load()

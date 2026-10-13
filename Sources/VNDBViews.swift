@@ -9,6 +9,8 @@ struct InfoSheet: View {
     let open: (SheetKind) -> Void
     let filterTag: (String) -> Void
     @State private var notes = ""
+    @State private var gallery: [GalleryImage] = []
+    @State private var viewing: Int?
 
     var body: some View {
         if let game = lib.games.first(where: { $0.id == id }) {
@@ -50,6 +52,9 @@ struct InfoSheet: View {
                 // tag list never pushes the rest off the page.
                 ScrollView {
                     VStack(alignment: .leading, spacing: 14) {
+                        if let vid = info?.id {
+                            GalleryStrip(vid: vid, viewing: $viewing, images: $gallery)
+                        }
                         if let info {
                             Text(info.description ?? "No description on VNDB.")
                                 .font(.system(size: 13))
@@ -140,6 +145,10 @@ struct InfoSheet: View {
         .frame(width: 780, height: 540)
         .background(Color.kPanel)
         .onAppear { notes = game.notes ?? "" }
+        .overlay { GalleryViewer(images: gallery, index: $viewing, gameID: id) }
+        .onChange(of: gallery) { _, g in
+            if ProcessInfo.processInfo.environment["VNLIB_VIEW_IMAGE"] != nil, !g.isEmpty { viewing = 0 }
+        }
     }
 
     private func trackingControls(_ game: Game) -> some View {
