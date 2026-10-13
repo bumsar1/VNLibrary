@@ -10,16 +10,19 @@ extension Library {
         return out.filter { FileManager.default.fileExists(atPath: $0) }
     }
 
-    func startCompanions(_ id: UUID) {
+    func startCompanions(_ id: UUID, gamePID: pid_t? = nil) {
         guard let game = games.first(where: { $0.id == id }) else { return }
         for path in companions(for: game) {
             let url = URL(fileURLWithPath: path)
             let bundleID = Bundle(url: url)?.bundleIdentifier
+            let handOff = gamePID != nil && bundleID == Meikipop.bundleID
             if let bundleID, !NSRunningApplication.runningApplications(withBundleIdentifier: bundleID).isEmpty {
+                if handOff, let gamePID { Meikipop.follow(gamePID) }
                 continue    // already open: not ours to close later
             }
             let cfg = NSWorkspace.OpenConfiguration()
             cfg.activates = false
+            if handOff, let gamePID { cfg.arguments = ["--game-pid", String(gamePID)] }
             NSWorkspace.shared.openApplication(at: url, configuration: cfg) { app, _ in
                 guard let app else { return }
                 Task { @MainActor in self.launchedCompanions[id, default: []].append(app) }
@@ -29,6 +32,19 @@ extension Library {
 
     func stopCompanions(_ id: UUID) {
         for app in launchedCompanions.removeValue(forKey: id) ?? [] { app.terminate() }
+    }
+}
+
+/// Meikipop (the OCR popup) can take the game's process from couch mode and find
+/// the game window itself, even in full screen, instead of asking for a window.
+enum Meikipop {
+    static let bundleID = "local.gustav.meikipop"
+
+    /// For a Meikipop that is already running: switch it to this game.
+    static func follow(_ pid: pid_t) {
+        DistributedNotificationCenter.default().postNotificationName(
+            .init("local.gustav.meikipop.followGame"), object: nil,
+            userInfo: ["pid": Int(pid)], deliverImmediately: true)
     }
 }
 

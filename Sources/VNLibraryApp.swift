@@ -58,9 +58,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 MainActor.assumeIsolated { Library.shared.showDeveloper(name: dev, id: nil) }
             }
         }
-        if env["VNLIB_LAUNCH_FIRST"] != nil {
+        if let how = env["VNLIB_LAUNCH_FIRST"] {    // "couch" launches like couch mode
             MainActor.assumeIsolated {
-                if let first = Library.shared.games.first { Library.shared.launch(first) }
+                if let first = Library.shared.games.first { Library.shared.launch(first, fullScreen: how == "couch") }
             }
         }
         if let out = env["VNLIB_SNAPSHOT"] {
