@@ -332,6 +332,18 @@ extension Library {
         saveSeen(game)
     }
 
+    /// Takes popup text that was counted before the filter knew about it
+    /// back off the count. Runs once.
+    func purgePopupText() {
+        let key = "purgedPopupText1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        for g in games {
+            let ids = Set(readLines(game: g.id).filter { ReadFilter.looksLikePopup($0.text) }.map(\.id))
+            if !ids.isEmpty { deleteReadLines(ids, game: g.id) }
+        }
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
     func resetReading(_ id: UUID) {
         readTrackers[id] = nil
         lastLinesCache[id] = nil
@@ -541,7 +553,18 @@ struct ReadFilter {
                           japaneseOnly: d.object(forKey: "readJapaneseOnly") as? Bool ?? true)
     }
 
+    /// Meikipop's own dictionary popup, read by the OCR when it sits over the
+    /// game: readings in [ ], "Add to Anki", and runs of English glosses.
+    static func looksLikePopup(_ raw: String) -> Bool {
+        if raw.contains("[") || raw.contains("]") || raw.localizedCaseInsensitiveContains("anki") { return true }
+        if raw.contains("】") != raw.contains("【") { return true }
+        let latin = raw.unicodeScalars.filter { ("a"..."z").contains($0) || ("A"..."Z").contains($0) }.count
+        let letters = raw.unicodeScalars.filter { CharacterSet.letters.contains($0) }.count
+        return latin >= 6 && Double(latin) >= Double(letters) * 0.2
+    }
+
     func ignores(raw: String, normalized n: String) -> Bool {
+        if Self.looksLikePopup(raw) { return true }
         // Text in dialogue brackets is speech: 「はい」 always counts, whatever the list says.
         if raw.contains(where: { "「」『』（）".contains($0) }) { return false }
         // A line without kana or kanji is a button, a date or a number.

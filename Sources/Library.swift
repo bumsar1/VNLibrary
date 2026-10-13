@@ -179,6 +179,7 @@ final class Library: ObservableObject {
         loaded = true
         loadSessions()
         detectEngines()
+        purgePopupText()
         processReadLog()
         if ProcessInfo.processInfo.environment["VNLIB_NO_VNDB"] == nil {
             measureSizes()
