@@ -44,11 +44,16 @@ Or build it yourself (needs Xcode):
 - **VNDB** — cover, description, developer, release year, length, rating and tags are fetched automatically; pick the right entry yourself with *Fetch from VNDB…** if the guess was wrong
 - **Tags** — click a tag on a game's page, or use the **Tags** menu, to filter the library. Sexual-content tags are shown in pink and can be hidden in Settings; spoiler tags are never shown
 - **Blur cover** — per game, from the right-click menu. Covers VNDB flags as suggestive are blurred automatically. The pixels themselves are blurred, so nothing shows through
-- **Play time** — tracks when you last played and for how long
+- **Activity tracker** — every session is logged with its day, start and end time and length. The Activity tab shows today / week / month / all-time totals, your streak, a year-long heatmap of the days you played (click a day to see its sessions), your top games and the full session log. Idle time (no input for 10 minutes) doesn't count
+- **Progress** — play time against VNDB's estimated length on each game's page
 - **Search** — matches names, VNDB titles (incl. Japanese), developers and tags
 
 <p align="center">
   <img src="docs/info.png" alt="Game page">
+</p>
+
+<p align="center">
+  <img src="docs/activity.png" alt="Activity tracker">
 </p>
 
 ## Launching games

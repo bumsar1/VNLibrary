@@ -125,7 +125,18 @@ struct InfoSheet: View {
             if let m = info.lengthMinutes, m > 0 { out.append("~\(max(1, Int((Double(m) / 60).rounded()))) hours") }
             if let r = info.rating { out.append("★ " + String(format: "%.2f", r / 10)) }
         }
-        out.append(game.playSeconds > 0 ? "Played \(Format.playtime(game.playSeconds))" : "Not played yet")
+        if game.playSeconds > 0 {
+            var played = "Played \(Format.playtime(game.playSeconds))"
+            // Rough progress against VNDB's estimated length.
+            if let m = game.vndb?.lengthMinutes, m > 0 {
+                played += " · \(min(100, Int(game.playSeconds / 60 / Double(m) * 100)))%"
+            }
+            out.append(played)
+            let n = lib.sessions(of: game.id).count
+            if n > 0 { out.append(n == 1 ? "1 session" : "\(n) sessions") }
+        } else {
+            out.append("Not played yet")
+        }
         return out
     }
 }

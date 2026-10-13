@@ -30,11 +30,16 @@ struct ContentView: View {
     @State private var sheet: SheetKind?
     @State private var showSettings = false
     @State private var dropping = false
+    @State private var mode: Mode = .library
+
+    enum Mode: String, CaseIterable { case library = "Library", activity = "Activity" }
 
     var body: some View {
         VStack(spacing: 0) {
             header
-            if lib.games.isEmpty {
+            if mode == .activity {
+                ActivityView(open: { sheet = $0 })
+            } else if lib.games.isEmpty {
                 emptyState
             } else {
                 grid
@@ -57,7 +62,7 @@ struct ContentView: View {
             switch kind {
             case .edit(let game): EditSheet(game: game).environmentObject(lib)
             case .info(let id):
-                InfoSheet(id: id, open: { sheet = $0 }, filterTag: { tag = $0 }).environmentObject(lib)
+                InfoSheet(id: id, open: { sheet = $0 }, filterTag: { tag = $0; mode = .library }).environmentObject(lib)
             case .vndb(let id): VNDBSheet(id: id).environmentObject(lib)
             }
         }
@@ -73,6 +78,7 @@ struct ContentView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: .addGames)) { _ in chooseGames() }
         .task {
+            if ProcessInfo.processInfo.environment["VNLIB_MODE"] == "activity" { mode = .activity }
             // Test hook: open the first game's info page after VNDB has answered.
             if ProcessInfo.processInfo.environment["VNLIB_OPEN_INFO"] != nil {
                 try? await Task.sleep(for: .seconds(2.5))
@@ -108,7 +114,25 @@ struct ContentView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(Color.kMuted)
             }
+            Picker("", selection: $mode) {
+                ForEach(Mode.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 180)
+            .padding(.leading, 14)
             Spacer()
+            if mode == .library { libraryControls }
+            IconButton(symbol: "plus", help: "Add games (⌘O)") { chooseGames() }
+            IconButton(symbol: "gearshape", help: "Settings") { showSettings = true }
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 34)
+        .padding(.bottom, 16)
+    }
+
+    @ViewBuilder
+    private var libraryControls: some View {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").foregroundStyle(Color.kMuted)
                 TextField("Search", text: $search)
@@ -128,13 +152,6 @@ struct ContentView: View {
             }
             .labelsHidden()
             .frame(width: 150)
-
-            IconButton(symbol: "plus", help: "Add games (⌘O)") { chooseGames() }
-            IconButton(symbol: "gearshape", help: "Settings") { showSettings = true }
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 34)
-        .padding(.bottom, 16)
     }
 
     private var tagMenu: some View {

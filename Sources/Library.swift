@@ -70,6 +70,13 @@ final class Library: ObservableObject {
     private var processes: [UUID: Process] = [:]
     private var appPIDs: [pid_t: UUID] = [:]
 
+    // Play sessions (see Sessions.swift).
+    @Published var sessions: [PlaySession] = []
+    var openSessions: [UUID: UUID] = [:]      // game id → its running session
+    var lastBeat: [UUID: Date] = [:]
+    var heartbeat: Timer?
+    var sessionsFile: URL { supportDir.appendingPathComponent("sessions.json") }
+
     init() {
         // VNLIB_SUPPORT_DIR lets a test run use a throwaway library.
         if let dir = ProcessInfo.processInfo.environment["VNLIB_SUPPORT_DIR"] {
@@ -87,6 +94,7 @@ final class Library: ObservableObject {
         autoVNDB = UserDefaults.standard.object(forKey: "autoVNDB") as? Bool ?? true
         showEroTags = UserDefaults.standard.object(forKey: "showEroTags") as? Bool ?? true
         load()
+        loadSessions()
         if ProcessInfo.processInfo.environment["VNLIB_NO_VNDB"] == nil {
             refreshVNDB(onlyOutdated: true)
         }
@@ -446,6 +454,8 @@ final class Library: ObservableObject {
         }
         games.removeAll { $0.id == id }
         save()
+        sessions.removeAll { $0.gameID == id }
+        saveSessions()
     }
 
     func exists(_ game: Game) -> Bool {
@@ -535,15 +545,15 @@ final class Library: ObservableObject {
             games[i].lastPlayed = Date()
             save()
         }
+        beginSession(id)
     }
 
     private func finished(_ id: UUID, status: Int32, log: URL?) {
         processes[id] = nil
         guard let start = running.removeValue(forKey: id) else { return }
         let elapsed = Date().timeIntervalSince(start)
+        endSession(id)     // adds the active time to the game's total
         guard let i = games.firstIndex(where: { $0.id == id }) else { return }
-        games[i].playSeconds += elapsed
-        save()
         // A quick non-zero exit means the game never really ran: show why.
         if status != 0, elapsed < 10 {
             var tail = ""

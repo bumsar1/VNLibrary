@@ -36,6 +36,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let urls = add.split(separator: ":").map { URL(fileURLWithPath: String($0)) }
             MainActor.assumeIsolated { _ = Library.shared.add(urls: urls) }
         }
+        if env["VNLIB_LAUNCH_FIRST"] != nil {
+            MainActor.assumeIsolated {
+                if let first = Library.shared.games.first { Library.shared.launch(first) }
+            }
+        }
         if let out = env["VNLIB_SNAPSHOT"] {
             let delay = Double(env["VNLIB_SNAPSHOT_DELAY"] ?? "") ?? 2.5
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
