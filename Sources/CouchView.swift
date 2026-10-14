@@ -56,6 +56,7 @@ struct CouchView: View {
     @State private var typing = false
     @State private var query = ""                            // the committed search
     @State private var searchResults: [VNDB.Result] = []
+    @State private var quietUntil = Date.distantPast
     @State private var producer: (name: String, items: [VNDB.Result])?   // "More from" a developer
     @State private var detail: Item?                         // the game page that's open
     @State private var detailState = CouchDetailState()
@@ -517,6 +518,10 @@ struct CouchView: View {
     // MARK: Actions
 
     private func handle(_ input: Input) {
+        // The controller belongs to the game once it's running: ignore it while
+        // VN Library isn't in front, and for a moment after starting a game
+        // (a burst of presses arrives as the game takes over the controller).
+        guard NSApp.isActive, Date() >= quietUntil else { return }
         if typing { return handleKeyboard(input) }
         if detail != nil { return handleDetail(input) }
         switch input {
@@ -710,6 +715,7 @@ struct CouchView: View {
         case .play:
             guard let game else { return }
             CouchSounds.shared.play(.select)
+            quietUntil = Date().addingTimeInterval(4)
             lib.launch(game, fullScreen: true)
             show("Starting \(lib.displayName(game))…")
         case .status:
