@@ -358,7 +358,9 @@ struct CouchView: View {
                 .strokeBorder(selected ? Color.white : (adult ? Color.kHinomaru : Color.clear), lineWidth: selected ? 3 : 2))
             .overlay(alignment: .bottomTrailing) { if adult { AdultBadge().padding(6) } }
             .overlay(alignment: .topLeading) { badge(item).padding(6) }
-            .shadow(color: .black.opacity(0.6), radius: selected ? 20 : 6, y: 8)
+            // Only the selected tile casts a shadow: a shadow on every tile was the
+            // most expensive thing to composite while moving around.
+            .shadow(color: .black.opacity(selected ? 0.6 : 0), radius: selected ? 20 : 0, y: selected ? 8 : 0)
             .opacity(focused ? (selected ? 1 : 0.75) : 0.5)
             .id(item.id)
             .onTapGesture {
