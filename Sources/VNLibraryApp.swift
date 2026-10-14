@@ -98,6 +98,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if let first = Library.shared.games.first { Library.shared.launch(first, fullScreen: how == "couch") }
             }
         }
+        if env["VNLIB_AX_CHECK"] != nil {
+            print("AX trusted:", FullScreen.ensureAccess(prompt: false))
+            exit(0)
+        }
         if let out = env["VNLIB_SNAPSHOT"] {
             let delay = Double(env["VNLIB_SNAPSHOT_DELAY"] ?? "") ?? 2.5
             DispatchQueue.main.asyncAfter(deadline: .now() + delay) {

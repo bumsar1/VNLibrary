@@ -654,6 +654,9 @@ final class Library: ObservableObject {
             run(game, executable: launcherPath, arguments: [game.path], fullScreen: fullScreen)
         case .macApp:
             let cfg = NSWorkspace.OpenConfiguration()
+            // Games whose window can't be made full screen from outside can
+            // read this and go full screen themselves (the PinPoint port does).
+            if fullScreen { cfg.environment = ["VNLIB_FULLSCREEN": "1"] }
             NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: game.path), configuration: cfg) { app, error in
                 let pid = app?.processIdentifier
                 let message = error?.localizedDescription
@@ -697,6 +700,7 @@ final class Library: ObservableObject {
         }
         var env = ProcessInfo.processInfo.environment
         env["GAME_DIR"] = game.path
+        if fullScreen { env["VNLIB_FULLSCREEN"] = "1" }
         p.environment = env
         let log = logURL(game)
         FileManager.default.createFile(atPath: log.path, contents: nil)
