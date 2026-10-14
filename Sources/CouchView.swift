@@ -237,6 +237,10 @@ struct CouchView: View {
             if env["VNLIB_UNBLUR"] != nil { lib.unblurAll = true }
             if env["VNLIB_COUCH_OPEN"] != nil { act() }
             if env["VNLIB_COUCH_OPEN"] == "developer", let d = detail { press(.developer, item: d, delta: 1) }
+            if env["VNLIB_COUCH_OPEN"] == "play", let d = detail {
+                try? await Task.sleep(for: .seconds(2))
+                press(.play, item: d, delta: 1)
+            }
         }
         .task(id: shown?.id) { await loadBackdrop() }
     }

@@ -145,6 +145,8 @@ final class Library: ObservableObject {
     private var images: [String: NSImage] = [:]
     private var processes: [UUID: Process] = [:]
     private var appPIDs: [pid_t: UUID] = [:]
+    /// The game's real process when LaunchServices didn't know it (see launch).
+    private var gamePIDs: [UUID: pid_t] = [:]
 
     // Play sessions (see Sessions.swift).
     @Published var sessions: [PlaySession] = []
@@ -219,6 +221,7 @@ final class Library: ObservableObject {
             let pid = app.processIdentifier
             MainActor.assumeIsolated {
                 guard let self, let id = self.appPIDs.removeValue(forKey: pid) else { return }
+                self.gamePIDs[id] = nil
                 self.finished(id, status: 0, log: nil)
             }
         }
@@ -658,13 +661,19 @@ final class Library: ObservableObject {
             // read this and go full screen themselves (the PinPoint port does).
             if fullScreen { cfg.environment = ["VNLIB_FULLSCREEN": "1"] }
             NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: game.path), configuration: cfg) { app, error in
-                let pid = app?.processIdentifier
+                let appPID = app?.processIdentifier
                 let message = error?.localizedDescription
                 Task { @MainActor in
-                    if let pid {
-                        self.appPIDs[pid] = game.id
-                        self.started(game.id, pid: pid, couchPID: fullScreen && pid > 0 ? pid : nil)
-                        if fullScreen { FullScreen.request(pid: pid) }
+                    if let appPID {
+                        self.appPIDs[appPID] = game.id
+                        // An app whose executable is a script that execs the engine
+                        // (the PinPoint port) has no pid in LaunchServices: -1.
+                        // Find the process running from inside the bundle instead.
+                        var pid = appPID
+                        if pid <= 0, let found = await Processes.waitForProcess(insideBundle: game.path) { pid = found }
+                        if pid > 0 { self.gamePIDs[game.id] = pid }
+                        self.started(game.id, pid: pid > 0 ? pid : nil, couchPID: fullScreen && pid > 0 ? pid : nil)
+                        if fullScreen && pid > 0 { FullScreen.request(pid: pid) }
                     } else {
                         self.alert = "Couldn't start \(game.name): \(message ?? "unknown error")"
                     }
@@ -758,6 +767,7 @@ final class Library: ObservableObject {
         if let pid = appPIDs.first(where: { $0.value == id })?.key {
             NSRunningApplication(processIdentifier: pid)?.terminate()
         }
+        if let pid = gamePIDs[id], pid > 0 { kill(pid, SIGTERM) }
     }
 
     func showLog(_ game: Game) {

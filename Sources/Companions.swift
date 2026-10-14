@@ -12,6 +12,7 @@ extension Library {
 
     func startCompanions(_ id: UUID, gamePID: pid_t? = nil) {
         guard let game = games.first(where: { $0.id == id }) else { return }
+        if ProcessInfo.processInfo.environment["VNLIB_DEBUG"] != nil { NSLog("VNLIB companions for %@ gamePID=%d", game.name, gamePID ?? -1) }
         for path in companions(for: game) {
             let url = URL(fileURLWithPath: path)
             let bundleID = Bundle(url: url)?.bundleIdentifier

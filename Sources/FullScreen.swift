@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Darwin
 
 /// Puts a launched game's window into macOS full screen through the
 /// Accessibility API, so it works for any game (siglus_engine, Mac apps,
@@ -34,12 +35,44 @@ enum FullScreen {
            (current as? Bool) == true { return true }
         // Bring it forward first; some windows ignore full screen while inactive.
         NSRunningApplication(processIdentifier: pid)?.activate()
+        // A window that can't be made full screen from outside (non-resizable
+        // SDL windows) goes full screen itself via VNLIB_FULLSCREEN. Leave it
+        // alone: poking it mid-transition flipped it back out.
+        var settable: DarwinBoolean = false
+        if AXUIElementIsAttributeSettable(window, "AXFullScreen" as CFString, &settable) == .success, !settable.boolValue {
+            return true
+        }
         return AXUIElementSetAttributeValue(window, "AXFullScreen" as CFString, kCFBooleanTrue) == .success
     }
 
 }
 
 enum Processes {
+    /// Waits up to ~10 s for a process whose executable lives inside the app
+    /// bundle, and returns the newest one.
+    static func waitForProcess(insideBundle path: String) async -> pid_t? {
+        let prefix = URL(fileURLWithPath: path).standardizedFileURL.path + "/Contents/"
+        for _ in 0..<20 {
+            if let pid = await Task.detached(operation: { newest(withExecutablePrefix: prefix) }).value { return pid }
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        return nil
+    }
+
+    private static func newest(withExecutablePrefix prefix: String) -> pid_t? {
+        // proc_pidpath gives the exact executable path (ps escapes non-ASCII,
+        // and game folders are often Japanese).
+        let count = proc_listallpids(nil, 0)
+        guard count > 0 else { return nil }
+        var pids = [pid_t](repeating: 0, count: Int(count) + 64)
+        let n = proc_listallpids(&pids, Int32(pids.count * MemoryLayout<pid_t>.size))
+        var buf = [CChar](repeating: 0, count: 4096)
+        return pids.prefix(Int(max(0, n))).filter { pid in
+            guard pid > 0, proc_pidpath(pid, &buf, UInt32(buf.count)) > 0 else { return false }
+            return String(cString: buf).hasPrefix(prefix)
+        }.max()
+    }
+
     /// Child processes, recursively (zsh → wine → the game).
     static func descendants(of pid: pid_t) -> [pid_t] {
         let p = Process()

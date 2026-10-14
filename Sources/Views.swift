@@ -109,6 +109,7 @@ struct ContentView: View {
         autoCouch()
         if env["VNLIB_MODE"] == "activity" { mode = .activity }
         if env["VNLIB_MODE"] == "couch" { couch = true }
+        if env["VNLIB_MODE"] == "couchfs" { setCouch(true) }
         if env["VNLIB_MODE"] == "settings" { showSettings = true }
         if env["VNLIB_MODE"] == "discover" { mode = .discover }
         if env["VNLIB_MODE"] == "kanji" { mode = .activity; sheet = .kanji(nil) }
