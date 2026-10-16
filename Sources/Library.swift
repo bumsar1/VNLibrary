@@ -783,13 +783,18 @@ final class Library: ObservableObject {
         guard let i = games.firstIndex(where: { $0.id == id }) else { return }
         // A quick non-zero exit means the game never really ran: show why.
         // (15 / 143 is SIGTERM: the user pressed Stop.)
-        if status != 0, status != 15, status != 143, elapsed < 10 {
+        // Bundled players report engine errors on stderr, so a crash mid-game
+        // gets an explanation too.
+        let player = BundledPlayer.of(games[i].kind)
+        if status != 0, status != 15, status != 143, elapsed < 10 || player != nil {
             var tail = ""
             if let log, let text = try? String(contentsOf: log, encoding: .utf8) {
                 let lines = text.split(separator: "\n")
                 // Bundled players end with one "<PREFIX>: <reason>" line.
-                if let p = BundledPlayer.of(games[i].kind), let reason = lines.last(where: { $0.hasPrefix(p.reasonPrefix) }) {
+                if let p = player, let reason = lines.last(where: { $0.hasPrefix(p.reasonPrefix) }) {
                     tail = reason.dropFirst(p.reasonPrefix.count).trimmingCharacters(in: .whitespaces) + "\n\n" + p.cantRunHint
+                } else if let p = player, case let errors = lines.filter({ $0.contains("*ERROR*") || $0.contains("ERROR") || $0.contains("panicked") }), !errors.isEmpty {
+                    tail = errors.suffix(4).joined(separator: "\n") + "\n\n" + p.cantRunHint
                 } else {
                     tail = lines.suffix(8).joined(separator: "\n")
                 }
