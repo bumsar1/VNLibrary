@@ -37,21 +37,33 @@ extension Library {
 
     func kirikiriPaths(for game: Game) -> KiriKiriPaths? {
         guard game.kind == .kirikiri, kirikiriFound, game.installed else { return nil }
-        if let cached = Self.kirikiriPathCache[game.path] { return cached }
+        // Keyed by the player's Start script and its date too, so a new player
+        // version (which may resolve folders differently) asks again.
+        let stamp = (try? FileManager.default.attributesOfItem(atPath: kirikiriStart)[.modificationDate] as? Date)?
+            .timeIntervalSince1970 ?? 0
+        let cacheKey = "\(kirikiriStart)|\(stamp)|\(game.path)"
+        if let cached = Self.kirikiriPathCache[cacheKey] { return cached }
         let paths = Self.runQuick(kirikiriStart, ["--print-paths", game.path])
             .flatMap { $0.split(separator: "\n").last(where: { $0.hasPrefix("{") }) }
             .flatMap { try? JSONDecoder().decode(KiriKiriPaths.self, from: Data($0.utf8)) }
-        Self.kirikiriPathCache[game.path] = .some(paths)   // remember failures too
+        Self.kirikiriPathCache[cacheKey] = .some(paths)   // remember failures too
         return paths
     }
 
-    /// A folder KiriKiri Player can run although it has no .xp3 or
-    /// startup.tjs: older games keep all their data inside the .exe.
-    /// `Start --check` is quick, starts no engine and exits 0 when it can.
+    /// A folder KiriKiri Player can run although detection didn't spot it:
+    /// older games keep all their data inside the .exe, and a download often
+    /// unpacks to a folder whose one subfolder is the game (the player uses
+    /// that subfolder). `Start --check` is quick, starts no engine and exits 0
+    /// when it can. Only asked for folders with an .exe at the top or one level down.
     func kirikiriCanRun(_ folder: String) -> Bool {
-        guard kirikiriFound,
-              let items = try? FileManager.default.contentsOfDirectory(atPath: folder),
-              items.contains(where: { $0.lowercased().hasSuffix(".exe") }) else { return false }
+        guard kirikiriFound else { return false }
+        let fm = FileManager.default
+        func hasExe(_ dir: String) -> Bool {
+            ((try? fm.contentsOfDirectory(atPath: dir)) ?? []).contains { $0.lowercased().hasSuffix(".exe") }
+        }
+        let subdirs = ((try? fm.contentsOfDirectory(atPath: folder)) ?? []).map { (folder as NSString).appendingPathComponent($0) }
+            .filter { var d: ObjCBool = false; return fm.fileExists(atPath: $0, isDirectory: &d) && d.boolValue }
+        guard hasExe(folder) || subdirs.contains(where: hasExe) else { return false }
         return Self.runQuick(kirikiriStart, ["--check", folder]) != nil
     }
 
@@ -101,7 +113,7 @@ struct KiriKiriPlayerSection: View {
         } header: {
             Text("KiriKiri Player")
         } footer: {
-            Text("Runs raw KiriKiri game folders (data.xp3) natively. Built in the VN-Ports project; games it can't run get a full port there.")
+            Text("Runs KiriKiri games natively: folders with data.xp3 or startup.tjs, older games with everything inside the .exe, and folders whose one subfolder is the game. Built in the VN-Ports project; games it can't run get a full port there.")
         }
         .task(id: lib.kirikiriStart) {
             let start = lib.kirikiriStart

@@ -751,7 +751,7 @@ struct EditSheet: View {
         case .reallive:
             return "Runs Key's older RealLive / AVG32 games natively with game_launcher_run from siglus_rs (Settings → Build RealLive support)."
         case .kirikiri:
-            return "Runs the game folder natively with KiriKiri Player (krkrsdl2). The folder needs data.xp3 or startup.tjs; the game's files are never changed, saves live in the player's Application Support folder."
+            return "Runs the game natively with KiriKiri Player (krkrsdl2): a folder with data.xp3 or startup.tjs, an older game with its data inside the .exe, or a folder whose one subfolder is the game. The game's files are never changed; saves live in the player's Application Support folder."
         case .macApp:
             return "Opens a regular Mac app, e.g. a Ren'Py port or a CrossOver shortcut."
         case .command:
