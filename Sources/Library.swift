@@ -716,6 +716,7 @@ final class Library: ObservableObject {
             run(game, executable: enginePath, arguments: ["--project-dir", game.path], fullScreen: fullScreen)
         case .command:
             let cmd = game.command.trimmingCharacters(in: .whitespacesAndNewlines)
+            prepareWineBottle(forCommand: cmd)
             guard !cmd.isEmpty else {
                 alert = "\(game.name) has no command yet. Right-click → Edit to set how the game starts."
                 return

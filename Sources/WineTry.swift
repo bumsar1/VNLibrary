@@ -40,6 +40,32 @@ enum WineRunner: Hashable, Identifiable {
         return out
     }
 
+    /// The bottle folder (holds system.reg and drive_c).
+    var bottleDir: String {
+        switch self {
+        case .whisky(_, let prefix): return prefix
+        case .crossover(let name): return Self.home + "/Library/Application Support/CrossOver/Bottles/" + name
+        }
+    }
+
+    /// The bottle a launch command runs in: VN Library's own commands use
+    /// WINEPREFIX='…' (Whisky) or --bottle '…' (CrossOver).
+    static func bottleDir(inCommand command: String) -> String? {
+        func quoted(after marker: String) -> String? {
+            guard let r = command.range(of: marker) else { return nil }
+            let rest = command[r.upperBound...]
+            if rest.first == "'" {
+                let body = rest.dropFirst()
+                guard let end = body.firstIndex(of: "'") else { return nil }
+                return String(body[..<end])
+            }
+            return rest.split(separator: " ").first.map(String.init)
+        }
+        if let p = quoted(after: "WINEPREFIX=") { return p }
+        if let n = quoted(after: "--bottle ") { return home + "/Library/Application Support/CrossOver/Bottles/" + n }
+        return nil
+    }
+
     /// The shell command that runs `exe`. A Japanese locale matters for most
     /// VNs: without it Shift-JIS text and file names come out garbled.
     func command(exe: String, japanese: Bool) -> String {
@@ -56,6 +82,53 @@ enum WineRunner: Hashable, Identifiable {
 }
 
 extension Library {
+    enum JapaneseFontResult { case alreadySet, fixed, wineRunning, failed(String) }
+
+    /// Makes Japanese text render in a Wine bottle: a fresh Whisky or
+    /// CrossOver bottle has no Japanese fonts, so menus and dialogs show boxes.
+    /// Uses wine-jp-fonts from VN-Ports (bundled) and the Japanese font that
+    /// ships inside KiriKiri Player, so nothing is downloaded.
+    func ensureJapaneseFonts(bottle: String) -> JapaneseFontResult {
+        guard let tool = Bundle.main.resourceURL?.appendingPathComponent("wine-jp-fonts").path,
+              FileManager.default.isExecutableFile(atPath: tool) else { return .failed("wine-jp-fonts isn't bundled") }
+        if Self.runQuick(tool, ["--bottle", bottle, "--check"]) != nil { return .alreadySet }
+        let app = URL(fileURLWithPath: playerStart(.kirikiri)).deletingLastPathComponent().deletingLastPathComponent()
+        let font = app.appendingPathComponent("Resources/player/fonts/NotoSansCJKjp-Regular.otf").path
+        guard FileManager.default.fileExists(atPath: font) else { return .failed("the Japanese font (from KiriKiri Player) wasn't found") }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: tool)
+        p.arguments = ["--bottle", bottle, "--font", font]
+        let err = Pipe()
+        p.standardError = err
+        p.standardOutput = FileHandle.nullDevice
+        guard (try? p.run()) != nil else { return .failed("couldn't run wine-jp-fonts") }
+        let data = err.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        switch p.terminationStatus {
+        case 0: return .fixed
+        case 3: return .wineRunning
+        default:
+            let msg = String(data: data, encoding: .utf8)?.split(separator: "\n").last.map(String.init) ?? "unknown error"
+            return .failed(msg.replacingOccurrences(of: "WINE_JP_FONTS: ", with: ""))
+        }
+    }
+
+    /// Settings button: every Whisky and CrossOver bottle on this Mac.
+    func fixJapaneseFontsInAllBottles() {
+        let bottles = WineRunner.available()
+        guard !bottles.isEmpty else { alert = "No Whisky or CrossOver bottles were found."; return }
+        var lines: [String] = []
+        for b in bottles {
+            switch ensureJapaneseFonts(bottle: b.bottleDir) {
+            case .alreadySet: lines.append("\(b.label): already fine")
+            case .fixed: lines.append("\(b.label): fixed")
+            case .wineRunning: lines.append("\(b.label): skipped — quit Wine (the game and Whisky/CrossOver) and try again")
+            case .failed(let why): lines.append("\(b.label): couldn't fix (\(why))")
+            }
+        }
+        alert = "Japanese text in Wine bottles\n\n" + lines.joined(separator: "\n")
+    }
+
     /// Likely game executables in a folder, biggest first, without
     /// installers, uninstallers and config tools.
     func executables(in folder: String) -> [String] {
@@ -72,6 +145,14 @@ extension Library {
             found.append((url.path, (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0))
         }
         return found.sorted { $0.1 > $1.1 }.map(\.0)
+    }
+
+    /// Before a game runs in a Wine bottle, give the bottle Japanese fonts if
+    /// it has none (quick; skipped quietly while Wine is running).
+    func prepareWineBottle(forCommand command: String) {
+        guard let bottle = WineRunner.bottleDir(inCommand: command),
+              FileManager.default.fileExists(atPath: bottle + "/system.reg") else { return }
+        if case .failed(let why) = ensureJapaneseFonts(bottle: bottle) { NSLog("VN Library: Japanese fonts for %@: %@", bottle, why) }
     }
 
     /// Runs a game with a one-off command, tracked like a normal launch.

@@ -40,8 +40,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleName</key>             <string>VN Library</string>
     <key>CFBundleDisplayName</key>      <string>VN Library</string>
     <key>CFBundleIdentifier</key>       <string>dk.cadesign.vnlibrary</string>
-    <key>CFBundleVersion</key>          <string>1.40</string>
-    <key>CFBundleShortVersionString</key><string>1.40</string>
+    <key>CFBundleVersion</key>          <string>1.41</string>
+    <key>CFBundleShortVersionString</key><string>1.41</string>
     <key>CFBundlePackageType</key>      <string>APPL</string>
     <key>CFBundleExecutable</key>       <string>VNLibrary</string>
     <key>CFBundleIconFile</key>         <string>AppIcon</string>
@@ -90,6 +90,12 @@ bundle_player() {   # <App name> <VN-Ports folder>
 bundle_player "KiriKiri Player" kirikiri-player
 bundle_player "BGI Player" bgi-player
 bundle_player "AliceSoft Player" alicesoft-player
+
+# Japanese fonts for Whisky / CrossOver bottles (VN-Ports/wine-tools).
+if [ -f "$PORTS/wine-tools/wine-jp-fonts" ]; then
+    cp "$PORTS/wine-tools/wine-jp-fonts" "$RES/wine-jp-fonts" && chmod +x "$RES/wine-jp-fonts"
+    echo "→ Bundled wine-jp-fonts"
+fi
 
 echo "→ Signing and clearing quarantine..."
 # A stable identity keeps the keychain from asking again for the VNDB token

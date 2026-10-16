@@ -861,6 +861,17 @@ struct SettingsSheet: View {
                         Text(lib.dailyCharGoal == 0 ? "Daily reading goal: off" : "Daily reading goal: \(lib.dailyCharGoal.formatted()) characters")
                     }
                 }
+                Section {
+                    HStack {
+                        Text("Japanese text in Whisky / CrossOver bottles")
+                        Spacer()
+                        Button("Fix All Bottles") { lib.fixJapaneseFontsInAllBottles() }
+                    }
+                } header: {
+                    Text("Wine")
+                } footer: {
+                    Text("A new bottle has no Japanese fonts, so menus and dialogs show boxes. VN Library adds one automatically before a game starts in a bottle; this does every bottle at once. Quit Wine first.")
+                }
                 Section("Background") {
                     BackgroundThemePicker()
                 }
