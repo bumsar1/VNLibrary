@@ -40,8 +40,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleName</key>             <string>VN Library</string>
     <key>CFBundleDisplayName</key>      <string>VN Library</string>
     <key>CFBundleIdentifier</key>       <string>dk.cadesign.vnlibrary</string>
-    <key>CFBundleVersion</key>          <string>1.30</string>
-    <key>CFBundleShortVersionString</key><string>1.30</string>
+    <key>CFBundleVersion</key>          <string>1.31</string>
+    <key>CFBundleShortVersionString</key><string>1.31</string>
     <key>CFBundlePackageType</key>      <string>APPL</string>
     <key>CFBundleExecutable</key>       <string>VNLibrary</string>
     <key>CFBundleIconFile</key>         <string>AppIcon</string>
@@ -62,6 +62,25 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
+echo "→ Bundling KiriKiri Player..."
+# Built in the VN-Ports project. Prefer the installed (tested) copy, then
+# VN-Ports' build output, else build it. Its own signature stays intact:
+# VN Library is signed afterwards without --deep.
+PORTS="$HOME/Cowork/Code/VN-Ports/kirikiri-player"
+PLAYER=""
+for c in "$HOME/Applications/KiriKiri Player.app" "$PORTS/build/KiriKiri Player.app"; do
+    [ -x "$c/Contents/MacOS/Start" ] && { PLAYER="$c"; break; }
+done
+if [ -z "$PLAYER" ] && [ -x "$PORTS/build.sh" ]; then
+    "$PORTS/build.sh" >/dev/null && PLAYER="$PORTS/build/KiriKiri Player.app"
+fi
+if [ -n "$PLAYER" ]; then
+    ditto "$PLAYER" "$RES/KiriKiri Player.app"
+    echo "  $("$RES/KiriKiri Player.app/Contents/MacOS/Start" --version 2>/dev/null)"
+else
+    echo "  (KiriKiri Player not found — KiriKiri games will need it installed separately)"
+fi
+
 echo "→ Signing and clearing quarantine..."
 # A stable identity keeps the keychain from asking again for the VNDB token
 # after every rebuild (an ad-hoc signature changes with each build). Reuses
@@ -72,6 +91,7 @@ else
     codesign --force --sign - "$APP" >/dev/null 2>&1 || echo "  (codesign skipped)"
 fi
 xattr -cr "$APP"
+[ -d "$RES/KiriKiri Player.app" ] && { codesign --verify --deep --strict "$APP" 2>/dev/null || echo "  (warning: signature check failed with the bundled player)"; }
 
 echo ""
 echo "✓ Built: $APP"

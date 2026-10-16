@@ -5,13 +5,31 @@ import SwiftUI
 /// runs raw KiriKiri game folders. VN Library runs `Start "<folder>"`; the
 /// script execs the engine, so the process VN Library starts is the game.
 extension Library {
-    static let defaultKirikiriPlayer = "~/Applications/KiriKiri Player.app"
+    static let installedKirikiriPlayer = "~/Applications/KiriKiri Player.app"
+    static var bundledKirikiriPlayer: String? {
+        Bundle.main.resourceURL.map { $0.appendingPathComponent("KiriKiri Player.app").path }
+    }
 
-    /// The Start script, whether the setting points at the .app or the script.
-    var kirikiriStart: String {
-        let p = (kirikiriPlayer as NSString).expandingTildeInPath
+    private static func startScript(_ path: String) -> String {
+        let p = (path as NSString).expandingTildeInPath
         return p.hasSuffix(".app") ? p + "/Contents/MacOS/Start" : p
     }
+
+    enum KiriKiriSource { case override, bundled, installed }
+
+    /// Which player is used: the Settings override when it exists, then the
+    /// copy inside VN Library, then ~/Applications. Saves don't depend on it.
+    var kirikiriResolved: (start: String, source: KiriKiriSource) {
+        let fm = FileManager.default
+        if !kirikiriPlayer.isEmpty, fm.isExecutableFile(atPath: Self.startScript(kirikiriPlayer)) {
+            return (Self.startScript(kirikiriPlayer), .override)
+        }
+        if let b = Self.bundledKirikiriPlayer, fm.isExecutableFile(atPath: Self.startScript(b)) {
+            return (Self.startScript(b), .bundled)
+        }
+        return (Self.startScript(Self.installedKirikiriPlayer), .installed)
+    }
+    var kirikiriStart: String { kirikiriResolved.start }
     var kirikiriFound: Bool { FileManager.default.isExecutableFile(atPath: kirikiriStart) }
 
     /// `Start --print-paths`: where the player keeps a game's saves and logs.
@@ -59,21 +77,35 @@ struct KiriKiriPlayerSection: View {
     var body: some View {
         Section {
             HStack {
-                TextField("KiriKiri Player.app", text: $lib.kirikiriPlayer)
+                TextField("Automatic (the copy inside VN Library)", text: $lib.kirikiriPlayer)
                     .font(.system(size: 12, design: .monospaced))
                 Button("Choose…") { choose() }
+                if !lib.kirikiriPlayer.isEmpty { Button("Automatic") { lib.kirikiriPlayer = "" } }
             }
-            Label(lib.kirikiriFound ? (version ?? "Found") : "Not found at that path",
-                  systemImage: lib.kirikiriFound ? "checkmark.circle.fill" : "xmark.circle.fill")
+            Label(statusText, systemImage: lib.kirikiriFound ? "checkmark.circle.fill" : "xmark.circle.fill")
                 .foregroundStyle(lib.kirikiriFound ? Color.kDone : Color.kHinomaru)
+            if !lib.kirikiriPlayer.isEmpty && lib.kirikiriResolved.source != .override {
+                Text("The chosen player wasn't found, so the automatic one is used.")
+                    .font(.system(size: 11)).foregroundStyle(.secondary)
+            }
         } header: {
             Text("KiriKiri Player")
         } footer: {
             Text("Runs raw KiriKiri game folders (data.xp3) natively. Built in the VN-Ports project; games it can't run get a full port there.")
         }
-        .task(id: lib.kirikiriPlayer) {
+        .task(id: lib.kirikiriStart) {
             let start = lib.kirikiriStart
             version = lib.kirikiriFound ? await Task.detached { Library.kirikiriVersion(start) }.value : nil
+        }
+    }
+
+    private var statusText: String {
+        guard lib.kirikiriFound else { return "KiriKiri Player not found" }
+        let v = version ?? "KiriKiri Player"
+        switch lib.kirikiriResolved.source {
+        case .bundled: return "\(v) · bundled with VN Library"
+        case .override: return "\(v) · \(lib.kirikiriPlayer)"
+        case .installed: return "\(v) · ~/Applications"
         }
     }
 

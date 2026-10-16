@@ -97,6 +97,39 @@ extension Library {
         Task { engineUpdate = await EngineUpdate.check(enginePath: enginePath) }
     }
 
+    /// On a Mac without siglus_engine: clone siglus_rs to ~/siglus_rs and build
+    /// it. Rust isn't installed behind the user's back; they're told how.
+    func installEngine() {
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        let cargo = home.appendingPathComponent(".cargo/bin/cargo").path
+        guard FileManager.default.isExecutableFile(atPath: cargo) else {
+            alert = "Building siglus_engine needs Rust, which isn't installed.\n\nInstall it from rustup.rs (one command in Terminal), then press Install siglus_engine again. It takes a few minutes the first time."
+            NSWorkspace.shared.open(URL(string: "https://rustup.rs")!)
+            return
+        }
+        let dir = home.appendingPathComponent("siglus_rs")
+        FileManager.default.createFile(atPath: engineLog.path, contents: nil)
+        let log = try? FileHandle(forWritingTo: engineLog)
+        Task {
+            if !FileManager.default.fileExists(atPath: dir.appendingPathComponent(".git").path) {
+                if FileManager.default.fileExists(atPath: dir.path) {
+                    engineUpdate = .failed("~/siglus_rs exists but isn't a git checkout; move it away and try again.")
+                    return
+                }
+                engineUpdate = .building(step: "Downloading siglus_rs…")
+                let (status, out) = await EngineUpdate.run("/usr/bin/git", ["clone", "--depth", "1", "https://github.com/xmoezzz/siglus_rs", dir.path],
+                                                           in: home, log: log)
+                guard status == 0 else {
+                    engineUpdate = .failed("Download failed: " + (out.split(separator: "\n").last.map(String.init) ?? "see the log"))
+                    return
+                }
+            }
+            try? log?.close()
+            siglusEngine = Self.defaultEngine
+            updateEngine(pull: false)
+        }
+    }
+
     /// git pull + cargo build, logged to engine-build.log. `pull: false`
     /// only builds (e.g. to add game_launcher_run to an existing checkout).
     func updateEngine(pull: Bool = true) {
@@ -134,6 +167,7 @@ import SwiftUI
 /// Update status and button for siglus_engine, in Settings.
 struct EngineUpdateRow: View {
     @EnvironmentObject var lib: Library
+    private var isBuilding: Bool { if case .building = lib.engineUpdate { return true } else { return false } }
 
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
@@ -151,7 +185,10 @@ struct EngineUpdateRow: View {
             .font(.system(size: 12))
             .lineLimit(2)
             Spacer()
-            if case .available = lib.engineUpdate {
+            if !lib.engineFound, EngineUpdate.repo(for: lib.enginePath) == nil, !isBuilding {
+                Button("Install siglus_engine") { lib.installEngine() }
+                    .help("Downloads siglus_rs to ~/siglus_rs and builds siglus_engine (needs Rust)")
+            } else if case .available = lib.engineUpdate {
                 Button("Update & Build") { lib.updateEngine() }
             } else if case .building = lib.engineUpdate {
                 EmptyView()

@@ -77,7 +77,8 @@ final class Library: ObservableObject {
     @Published var siglusEngine: String {
         didSet { UserDefaults.standard.set(siglusEngine, forKey: "siglusEngine") }
     }
-    /// KiriKiri Player.app (built in VN-Ports on krkrsdl2), or its Start script.
+    /// An override for KiriKiri Player.app (or its Start script); empty means
+    /// automatic: the copy bundled inside VN Library, else ~/Applications.
     @Published var kirikiriPlayer: String {
         didSet { UserDefaults.standard.set(kirikiriPlayer, forKey: "kirikiriPlayer") }
     }
@@ -174,7 +175,7 @@ final class Library: ObservableObject {
             try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
         }
         siglusEngine = UserDefaults.standard.string(forKey: "siglusEngine") ?? Self.defaultEngine
-        kirikiriPlayer = UserDefaults.standard.string(forKey: "kirikiriPlayer") ?? Self.defaultKirikiriPlayer
+        kirikiriPlayer = UserDefaults.standard.string(forKey: "kirikiriPlayer") ?? ""
         autoVNDB = UserDefaults.standard.object(forKey: "autoVNDB") as? Bool ?? true
         showEroTags = UserDefaults.standard.object(forKey: "showEroTags") as? Bool ?? true
         discreet = UserDefaults.standard.bool(forKey: "discreet")
@@ -689,7 +690,7 @@ final class Library: ObservableObject {
             }
         case .kirikiri:
             guard kirikiriFound else {
-                alert = "KiriKiri Player wasn't found:\n\(kirikiriPlayer)\n\nSet its path in Settings → KiriKiri Player."
+                alert = "KiriKiri Player wasn't found (it's normally bundled with VN Library).\n\nChoose it under Settings → KiriKiri Player."
                 return
             }
             run(game, executable: kirikiriStart, arguments: [game.path], fullScreen: fullScreen)
