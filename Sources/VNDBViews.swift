@@ -54,7 +54,8 @@ struct InfoSheet: View {
                 }
                 FlowChips(items: facts(game))
                 if let j = game.jiten { JitenLine(info: j) }
-                if let e = game.engine, e != .unknown, lib.exists(game), game.kind == .command || !e.native || e == .reallive && game.kind != .reallive {
+                if let e = game.engine, e != .unknown, lib.exists(game), game.kind == .command || !e.native || e == .reallive && game.kind != .reallive
+                    || e == .kirikiri && game.kind != .kirikiri {
                     // How this engine plays on a Mac, when it isn't already set up natively.
                     Label("\(e.name): \(e.hint)", systemImage: e.native ? "macwindow" : "info.circle")
                         .font(.system(size: 11)).foregroundStyle(e.native ? Color.kDone : Color.kMuted)

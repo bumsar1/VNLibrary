@@ -40,6 +40,7 @@ Or build it yourself (needs Xcode):
 
 ## Features
 
+- **KiriKiri games** run natively with KiriKiri Player (krkrsdl2, built in the VN-Ports project): add a raw KiriKiri folder and it's detected and launched with the player.
 - **Drag & drop** — drop game folders or Mac apps into the window (or onto the Dock icon)
 - **VNDB** — cover, description, developer, release year, length, rating and tags are fetched automatically; pick the right entry yourself with *Fetch from VNDB…** if the guess was wrong
 - **Tags** — click a tag on a game's page, or use the **Tags** menu, to filter the library. Sexual-content tags are shown in pink and can be hidden in Settings; spoiler tags are never shown

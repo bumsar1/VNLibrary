@@ -31,7 +31,7 @@ enum VNEngine: String, Codable {
         switch self {
         case .siglus: return "Runs natively with siglus_engine."
         case .reallive: return "Key's older engine. siglus_rs runs it natively with game_launcher_run — choose “RealLive / AVG32” under Edit → Launch with."
-        case .kirikiri: return "krkrsdl2 is a native Mac port of the KiriKiri engine; many KiriKiri games run with it. Otherwise Whisky / CrossOver."
+        case .kirikiri: return "Runs natively with KiriKiri Player — choose “KiriKiri” under Edit → Launch with. If a game won't run in it (encrypted, E-mote, data inside the .exe), port it in the VN-Ports chat."
         case .renpy: return "Ren'Py runs natively on Mac: open the game folder with the Ren'Py launcher, or use the game's Mac build."
         case .nscripter: return "ONScripter (e.g. onscripter-en) plays NScripter games natively on Mac."
         case .tyrano: return "TyranoScript games are HTML: they run in an NW.js or browser build on Mac."
@@ -43,7 +43,7 @@ enum VNEngine: String, Codable {
         }
     }
 
-    var native: Bool { [.siglus, .reallive, .renpy, .nscripter, .tyrano, .rpgmaker].contains(self) }
+    var native: Bool { [.siglus, .reallive, .kirikiri, .renpy, .nscripter, .tyrano, .rpgmaker].contains(self) }
 
     /// Looks at the top two levels of a game folder.
     static func detect(_ folder: String) -> VNEngine {
@@ -67,7 +67,7 @@ enum VNEngine: String, Codable {
         func has(_ n: String) -> Bool { names.contains(n) }
         if has("scene.pck") || has("gameexe.dat") { return .siglus }
         if has("gameexe.ini") && (has("seen.txt") || names.contains { $0.hasPrefix("seen") && $0.hasSuffix(".txt") }) { return .reallive }
-        if exts.contains("xp3") { return .kirikiri }
+        if exts.contains("xp3") || has("startup.tjs") { return .kirikiri }
         if dirs.contains("renpy") || exts.contains("rpa") || exts.contains("rpyc") { return .renpy }
         if has("nscript.dat") || has("0.txt") || has("00.txt") || exts.contains("nsa") || exts.contains("sar") { return .nscripter }
         if dirs.contains("tyrano") || has("tyrano.js") { return .tyrano }

@@ -25,6 +25,21 @@ enum FullScreen {
         }
     }
 
+    /// Gives the game the focus. Since macOS 14 an app can't take it by
+    /// itself: a game started as a plain child process (KiriKiri Player,
+    /// siglus_engine) stays behind VN Library unless VN Library yields to it.
+    /// Returns whether the game is now in front.
+    @discardableResult
+    static func bringForward(_ pid: pid_t) -> Bool {
+        guard let app = NSRunningApplication(processIdentifier: pid) else { return false }
+        if app.isActive { return true }
+        DispatchQueue.main.sync {
+            NSApp.yieldActivation(to: app)
+            app.activate(from: .current, options: [])
+        }
+        return app.isActive
+    }
+
     private static func makeFullScreen(_ pid: pid_t) -> Bool {
         let app = AXUIElementCreateApplication(pid)
         var value: CFTypeRef?
@@ -34,13 +49,14 @@ enum FullScreen {
         if AXUIElementCopyAttributeValue(window, "AXFullScreen" as CFString, &current) == .success,
            (current as? Bool) == true { return true }
         // Bring it forward first; some windows ignore full screen while inactive.
-        NSRunningApplication(processIdentifier: pid)?.activate()
+        let front = bringForward(pid)
         // A window that can't be made full screen from outside (non-resizable
         // SDL windows) goes full screen itself via VNLIB_FULLSCREEN. Leave it
-        // alone: poking it mid-transition flipped it back out.
+        // alone: poking it mid-transition flipped it back out. It can only do
+        // that while it's in front, so keep going until it is.
         var settable: DarwinBoolean = false
         if AXUIElementIsAttributeSettable(window, "AXFullScreen" as CFString, &settable) == .success, !settable.boolValue {
-            return true
+            return front
         }
         return AXUIElementSetAttributeValue(window, "AXFullScreen" as CFString, kCFBooleanTrue) == .success
     }

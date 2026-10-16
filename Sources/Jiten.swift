@@ -37,16 +37,25 @@ enum Jiten {
 
     private static let service = "dk.cadesign.vnlibrary.jiten"
 
+    /// Read from the keychain once: labels ask for it on every render.
+    nonisolated(unsafe) private static var cachedKey: String??
+
     static var key: String? {
         get {
+            if let cached = cachedKey { return cached }
+            // Test runs with their own data folder stay out of the keychain
+            // (each new build would wait on a keychain prompt).
+            if ProcessInfo.processInfo.environment["VNLIB_SUPPORT_DIR"] != nil { return nil }
             let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
                                     kSecAttrService as String: service, kSecReturnData as String: true]
             var out: AnyObject?
-            guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess,
-                  let data = out as? Data else { return nil }
-            return String(data: data, encoding: .utf8)
+            let value = SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess
+                ? (out as? Data).flatMap { String(data: $0, encoding: .utf8) } : nil
+            cachedKey = .some(value)
+            return value
         }
         set {
+            cachedKey = .some(newValue?.isEmpty == false ? newValue : nil)
             let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrService as String: service]
             SecItemDelete(q as CFDictionary)
             guard let newValue, !newValue.isEmpty else { return }

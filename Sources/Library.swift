@@ -4,12 +4,13 @@ import SwiftUI
 
 /// How a game is started.
 enum LaunchKind: String, Codable, CaseIterable, Identifiable {
-    case siglus, reallive, macApp, command
+    case siglus, reallive, kirikiri, macApp, command
     var id: String { rawValue }
     var label: String {
         switch self {
         case .siglus: return "Siglus (siglus_engine)"
         case .reallive: return "RealLive / AVG32 (game_launcher_run)"
+        case .kirikiri: return "KiriKiri (KiriKiri Player)"
         case .macApp: return "Mac app"
         case .command: return "Custom command"
         }
@@ -75,6 +76,10 @@ final class Library: ObservableObject {
     @Published var alert: String?
     @Published var siglusEngine: String {
         didSet { UserDefaults.standard.set(siglusEngine, forKey: "siglusEngine") }
+    }
+    /// KiriKiri Player.app (built in VN-Ports on krkrsdl2), or its Start script.
+    @Published var kirikiriPlayer: String {
+        didSet { UserDefaults.standard.set(kirikiriPlayer, forKey: "kirikiriPlayer") }
     }
     @Published var autoVNDB: Bool {
         didSet { UserDefaults.standard.set(autoVNDB, forKey: "autoVNDB") }
@@ -169,6 +174,7 @@ final class Library: ObservableObject {
             try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
         }
         siglusEngine = UserDefaults.standard.string(forKey: "siglusEngine") ?? Self.defaultEngine
+        kirikiriPlayer = UserDefaults.standard.string(forKey: "kirikiriPlayer") ?? Self.defaultKirikiriPlayer
         autoVNDB = UserDefaults.standard.object(forKey: "autoVNDB") as? Bool ?? true
         showEroTags = UserDefaults.standard.object(forKey: "showEroTags") as? Bool ?? true
         discreet = UserDefaults.standard.bool(forKey: "discreet")
@@ -316,6 +322,7 @@ final class Library: ObservableObject {
             var game = detect(url)
             if game.kind != .macApp { game.engine = VNEngine.detect(game.path) }
             if game.engine == .reallive { game.kind = .reallive }
+            if game.engine == .kirikiri && game.kind == .command { game.kind = .kirikiri }
             if let src = findCoverSource(for: game) { game.cover = importCover(from: src, id: game.id) }
             games.append(game)
             if game.kind == .command { unknown.append(game) }
@@ -627,7 +634,8 @@ final class Library: ObservableObject {
     /// Links a game to its folder or app and works out how to launch it.
     func detectKind(of url: URL) -> LaunchKind {
         if url.pathExtension.lowercased() == "app" { return .macApp }
-        return isSiglus(url) ? .siglus : .command
+        if isSiglus(url) { return .siglus }
+        return VNEngine.detect(url.path) == .kirikiri ? .kirikiri : .command
     }
 
     var enginePath: String { (siglusEngine as NSString).expandingTildeInPath }
@@ -679,6 +687,12 @@ final class Library: ObservableObject {
                     }
                 }
             }
+        case .kirikiri:
+            guard kirikiriFound else {
+                alert = "KiriKiri Player wasn't found:\n\(kirikiriPlayer)\n\nSet its path in Settings → KiriKiri Player."
+                return
+            }
+            run(game, executable: kirikiriStart, arguments: [game.path], fullScreen: fullScreen)
         case .siglus:
             guard engineFound else {
                 alert = "siglus_engine wasn't found:\n\(enginePath)\n\nSet the right path in Settings (the gear icon)."
@@ -753,10 +767,18 @@ final class Library: ObservableObject {
         stopCompanions(id)
         guard let i = games.firstIndex(where: { $0.id == id }) else { return }
         // A quick non-zero exit means the game never really ran: show why.
-        if status != 0, elapsed < 10 {
+        // (15 / 143 is SIGTERM: the user pressed Stop.)
+        if status != 0, status != 15, status != 143, elapsed < 10 {
             var tail = ""
             if let log, let text = try? String(contentsOf: log, encoding: .utf8) {
-                tail = text.split(separator: "\n").suffix(8).joined(separator: "\n")
+                let lines = text.split(separator: "\n")
+                // KiriKiri Player ends with one "KIRIKIRI_PLAYER: <reason>" line.
+                if games[i].kind == .kirikiri, let reason = lines.last(where: { $0.hasPrefix("KIRIKIRI_PLAYER:") }) {
+                    tail = reason.dropFirst("KIRIKIRI_PLAYER:".count).trimmingCharacters(in: .whitespaces)
+                        + "\n\nIf it's a KiriKiri game the player can't run (encrypted, E-mote, data inside the .exe), bring it to the VN-Ports chat for a full port."
+                } else {
+                    tail = lines.suffix(8).joined(separator: "\n")
+                }
             }
             alert = "\(games[i].name) quit with an error (code \(status)).\n\n\(tail)"
         }

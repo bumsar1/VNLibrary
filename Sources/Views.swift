@@ -750,6 +750,8 @@ struct EditSheet: View {
             return "Runs the folder with siglus_engine, which scales the game to fill the window. Set the path to siglus_engine in Settings."
         case .reallive:
             return "Runs Key's older RealLive / AVG32 games natively with game_launcher_run from siglus_rs (Settings → Build RealLive support)."
+        case .kirikiri:
+            return "Runs the game folder natively with KiriKiri Player (krkrsdl2). The folder needs data.xp3 or startup.tjs; the game's files are never changed, saves live in the player's Application Support folder."
         case .macApp:
             return "Opens a regular Mac app, e.g. a Ren'Py port or a CrossOver shortcut."
         case .command:
@@ -771,6 +773,7 @@ struct EditSheet: View {
             game.engine = url.pathExtension.lowercased() == "app" ? nil : VNEngine.detect(url.path)
             if any, game.engine == .reallive { game.kind = .reallive }
             else if game.kind != .macApp, lib.isSiglus(url) { game.kind = .siglus }
+            else if any, game.engine == .kirikiri { game.kind = .kirikiri }
         }
     }
 }
@@ -866,6 +869,7 @@ struct SettingsSheet: View {
                 } footer: {
                     Text("Blurs every cover and hides adult games and sexual tags. Toggle it any time with ⌘⇧D or the eye button.")
                 }
+                KiriKiriPlayerSection().environmentObject(lib)
                 VNDBAccountSection().environmentObject(lib)
             }
             .formStyle(.grouped)

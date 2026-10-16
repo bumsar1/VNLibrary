@@ -16,6 +16,7 @@ enum VNDBAccount {
 
     static var token: String? {
         get {
+            if ProcessInfo.processInfo.environment["VNLIB_SUPPORT_DIR"] != nil { return nil }
             let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
                                     kSecAttrService as String: service,
                                     kSecReturnData as String: true]
