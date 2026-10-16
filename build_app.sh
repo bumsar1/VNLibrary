@@ -40,8 +40,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleName</key>             <string>VN Library</string>
     <key>CFBundleDisplayName</key>      <string>VN Library</string>
     <key>CFBundleIdentifier</key>       <string>dk.cadesign.vnlibrary</string>
-    <key>CFBundleVersion</key>          <string>1.34</string>
-    <key>CFBundleShortVersionString</key><string>1.34</string>
+    <key>CFBundleVersion</key>          <string>1.35</string>
+    <key>CFBundleShortVersionString</key><string>1.35</string>
     <key>CFBundlePackageType</key>      <string>APPL</string>
     <key>CFBundleExecutable</key>       <string>VNLibrary</string>
     <key>CFBundleIconFile</key>         <string>AppIcon</string>
@@ -63,18 +63,26 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 PLIST
 
 echo "→ Bundling KiriKiri Player..."
-# Built in the VN-Ports project. Prefer the installed (tested) copy, then
-# VN-Ports' build output, else build it. Its own signature stays intact:
-# VN Library is signed afterwards without --deep.
-PORTS="$HOME/Cowork/Code/VN-Ports/kirikiri-player"
-PLAYER=""
-for c in "$HOME/Applications/KiriKiri Player.app" "$PORTS/build/KiriKiri Player.app"; do
-    [ -x "$c/Contents/MacOS/Start" ] && { PLAYER="$c"; break; }
+# Built in the VN-Ports project. Takes the newest version among the
+# installed copy, VN-Ports' build output and the VN-Ports chat's worktrees;
+# builds it if there's none. Its own signature stays intact: VN Library is
+# signed afterwards without --deep.
+PORTS="$HOME/Cowork/Code/VN-Ports"
+PLAYER=""; BEST=""
+for c in "$HOME/Applications/KiriKiri Player.app" "$PORTS/kirikiri-player/build/KiriKiri Player.app" \
+         "$PORTS"/.claude/worktrees/*/kirikiri-player/build/"KiriKiri Player.app"; do
+    [ -x "$c/Contents/MacOS/Start" ] || continue
+    V="$("$c/Contents/MacOS/Start" --version 2>/dev/null | sed -n 's/^KiriKiri Player \([0-9.]*\).*/\1/p')"
+    [ -n "$V" ] || continue
+    if [ -z "$BEST" ] || [ "$(printf '%s\n%s\n' "$BEST" "$V" | sort -V | tail -1)" = "$V" ] && [ "$V" != "$BEST" ]; then
+        BEST="$V"; PLAYER="$c"
+    fi
 done
-if [ -z "$PLAYER" ] && [ -x "$PORTS/build.sh" ]; then
-    "$PORTS/build.sh" >/dev/null && PLAYER="$PORTS/build/KiriKiri Player.app"
+if [ -z "$PLAYER" ] && [ -x "$PORTS/kirikiri-player/build.sh" ]; then
+    "$PORTS/kirikiri-player/build.sh" >/dev/null && PLAYER="$PORTS/kirikiri-player/build/KiriKiri Player.app"
 fi
 if [ -n "$PLAYER" ]; then
+    rm -rf "$RES/KiriKiri Player.app"
     ditto "$PLAYER" "$RES/KiriKiri Player.app"
     echo "  $("$RES/KiriKiri Player.app/Contents/MacOS/Start" --version 2>/dev/null)"
 else

@@ -13,12 +13,13 @@ enum FullScreen {
         return AXIsProcessTrustedWithOptions([key: prompt] as CFDictionary)
     }
 
-    /// Waits for the game's first window (up to ~20 s) and makes it full screen.
+    /// Waits for the game's first window (up to ~60 s: KiriKiri Player converts
+    /// a game's video and MIDI on its first launch) and makes it full screen.
     /// `pid` may be a launcher shell; its child processes are tried too.
     static func request(pid: pid_t) {
         guard ensureAccess(prompt: true) else { return }
         Task.detached {
-            for _ in 0..<40 {
+            for _ in 0..<120 {
                 try? await Task.sleep(for: .milliseconds(500))
                 for p in [pid] + Processes.descendants(of: pid) where makeFullScreen(p) { return }
             }

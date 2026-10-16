@@ -328,6 +328,10 @@ final class Library: ObservableObject {
             if game.kind != .macApp { game.engine = VNEngine.detect(game.path) }
             if game.engine == .reallive { game.kind = .reallive }
             if game.engine == .kirikiri && game.kind == .command { game.kind = .kirikiri }
+            if game.kind == .command, game.engine == .unknown, kirikiriCanRun(game.path) {
+                game.engine = .kirikiri
+                game.kind = .kirikiri
+            }
             if let src = findCoverSource(for: game) { game.cover = importCover(from: src, id: game.id) }
             games.append(game)
             if game.kind == .command { unknown.append(game) }
@@ -640,7 +644,7 @@ final class Library: ObservableObject {
     func detectKind(of url: URL) -> LaunchKind {
         if url.pathExtension.lowercased() == "app" { return .macApp }
         if isSiglus(url) { return .siglus }
-        return VNEngine.detect(url.path) == .kirikiri ? .kirikiri : .command
+        return VNEngine.detect(url.path) == .kirikiri || kirikiriCanRun(url.path) ? .kirikiri : .command
     }
 
     var enginePath: String { (siglusEngine as NSString).expandingTildeInPath }

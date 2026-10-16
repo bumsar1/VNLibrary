@@ -773,7 +773,7 @@ struct EditSheet: View {
             game.engine = url.pathExtension.lowercased() == "app" ? nil : VNEngine.detect(url.path)
             if any, game.engine == .reallive { game.kind = .reallive }
             else if game.kind != .macApp, lib.isSiglus(url) { game.kind = .siglus }
-            else if any, game.engine == .kirikiri { game.kind = .kirikiri }
+            else if any, game.engine == .kirikiri || lib.kirikiriCanRun(url.path) { game.kind = .kirikiri; game.engine = .kirikiri }
         }
     }
 }

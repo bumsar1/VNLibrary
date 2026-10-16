@@ -45,6 +45,16 @@ extension Library {
         return paths
     }
 
+    /// A folder KiriKiri Player can run although it has no .xp3 or
+    /// startup.tjs: older games keep all their data inside the .exe.
+    /// `Start --check` is quick, starts no engine and exits 0 when it can.
+    func kirikiriCanRun(_ folder: String) -> Bool {
+        guard kirikiriFound,
+              let items = try? FileManager.default.contentsOfDirectory(atPath: folder),
+              items.contains(where: { $0.lowercased().hasSuffix(".exe") }) else { return false }
+        return Self.runQuick(kirikiriStart, ["--check", folder]) != nil
+    }
+
     /// One line, e.g. "KiriKiri Player 0.1.0 (krkrsdl2 latest 2026-08-31)".
     nonisolated static func kirikiriVersion(_ start: String) -> String? {
         runQuick(start, ["--version"])?.split(separator: "\n").first.map(String.init)
