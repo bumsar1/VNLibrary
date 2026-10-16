@@ -37,13 +37,14 @@ enum VNEngine: String, Codable {
         case .tyrano: return "TyranoScript games are HTML: they run in an NW.js or browser build on Mac."
         case .rpgmaker: return "RPG Maker MV/MZ games are HTML: they run with NW.js for Mac (copy the www folder into an NW.js app)."
         case .unity: return "Unity games need the developer's Mac build, or Whisky / CrossOver."
-        case .artemis, .catsystem, .bgi, .yuris, .qlie, .wolf:
+        case .bgi: return "Runs natively with BGI Player — choose “BGI / Ethornell” under Edit → Launch with. If a game won't run in it, bring it to the VN-Ports chat."
+        case .artemis, .catsystem, .yuris, .qlie, .wolf:
             return "No native Mac runner that I know of: try Whisky / CrossOver (right-click → Try with Whisky / CrossOver)."
         case .unknown: return "Engine not recognised."
         }
     }
 
-    var native: Bool { [.siglus, .reallive, .kirikiri, .renpy, .nscripter, .tyrano, .rpgmaker].contains(self) }
+    var native: Bool { [.siglus, .reallive, .kirikiri, .bgi, .renpy, .nscripter, .tyrano, .rpgmaker].contains(self) }
 
     /// Looks at the top two levels of a game folder.
     static func detect(_ folder: String) -> VNEngine {

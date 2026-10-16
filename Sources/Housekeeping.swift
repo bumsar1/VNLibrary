@@ -18,8 +18,8 @@ extension Library {
     /// inside the game folder (Siglus and KiriKiri use "savedata").
     func saveFolder(for game: Game) -> URL? {
         if let s = game.saveFolder, !s.isEmpty { return URL(fileURLWithPath: s) }
-        // KiriKiri Player keeps saves in its own folder; the game folder is never written to.
-        if game.kind == .kirikiri, let p = kirikiriPaths(for: game) { return URL(fileURLWithPath: p.saves) }
+        // Bundled players keep saves in their own folder; the game folder is never written to.
+        if BundledPlayer.of(game.kind) != nil, let p = playerPaths(for: game) { return URL(fileURLWithPath: p.saves) }
         guard game.installed, game.kind != .macApp else { return nil }
         let base = URL(fileURLWithPath: game.path)
         for n in ["savedata", "SaveData", "save", "Save", "saves", "Saves", "savedat"] {

@@ -750,8 +750,9 @@ struct EditSheet: View {
             return "Runs the folder with siglus_engine, which scales the game to fill the window. Set the path to siglus_engine in Settings."
         case .reallive:
             return "Runs Key's older RealLive / AVG32 games natively with game_launcher_run from siglus_rs (Settings → Build RealLive support)."
-        case .kirikiri:
-            return "Runs the game natively with KiriKiri Player (krkrsdl2): a folder with data.xp3 or startup.tjs, an older game with its data inside the .exe, or a folder whose one subfolder is the game. The game's files are never changed; saves live in the player's Application Support folder."
+        case .kirikiri, .bgi:
+            let p = BundledPlayer.of(game.kind)!
+            return "Runs the game natively with \(p.title), bundled with VN Library. It takes \(p.accepts) The game's files are never changed; saves live in the player's Application Support folder."
         case .macApp:
             return "Opens a regular Mac app, e.g. a Ren'Py port or a CrossOver shortcut."
         case .command:
@@ -773,7 +774,10 @@ struct EditSheet: View {
             game.engine = url.pathExtension.lowercased() == "app" ? nil : VNEngine.detect(url.path)
             if any, game.engine == .reallive { game.kind = .reallive }
             else if game.kind != .macApp, lib.isSiglus(url) { game.kind = .siglus }
-            else if any, game.engine == .kirikiri || lib.kirikiriCanRun(url.path) { game.kind = .kirikiri; game.engine = .kirikiri }
+            else if any, let kind = lib.playerKind(for: url.path, engine: game.engine) {
+                game.kind = kind
+                if let p = BundledPlayer.of(kind) { game.engine = p.engine }
+            }
         }
     }
 }
@@ -803,7 +807,7 @@ struct SettingsSheet: View {
                 } footer: {
                     Text("Used for every Siglus game (Key games like Summer Pockets, Clannad, …).")
                 }
-                KiriKiriPlayerSection().environmentObject(lib)
+                ForEach(BundledPlayer.allCases) { PlayerSection(player: $0).environmentObject(lib) }
                 Section("VNDB data") {
                     Toggle("Fetch cover and info from VNDB when a game is added", isOn: $lib.autoVNDB)
                     Toggle("Show sexual-content tags (pink)", isOn: $lib.showEroTags)

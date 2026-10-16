@@ -4,13 +4,14 @@ import SwiftUI
 
 /// How a game is started.
 enum LaunchKind: String, Codable, CaseIterable, Identifiable {
-    case siglus, reallive, kirikiri, macApp, command
+    case siglus, reallive, kirikiri, bgi, macApp, command
     var id: String { rawValue }
     var label: String {
         switch self {
         case .siglus: return "Siglus (siglus_engine)"
         case .reallive: return "RealLive / AVG32 (game_launcher_run)"
         case .kirikiri: return "KiriKiri (KiriKiri Player)"
+        case .bgi: return "BGI / Ethornell (BGI Player)"
         case .macApp: return "Mac app"
         case .command: return "Custom command"
         }
@@ -77,10 +78,10 @@ final class Library: ObservableObject {
     @Published var siglusEngine: String {
         didSet { UserDefaults.standard.set(siglusEngine, forKey: "siglusEngine") }
     }
-    /// An override for KiriKiri Player.app (or its Start script); empty means
-    /// automatic: the copy bundled inside VN Library, else ~/Applications.
-    @Published var kirikiriPlayer: String {
-        didSet { UserDefaults.standard.set(kirikiriPlayer, forKey: "kirikiriPlayer") }
+    /// Per-player overrides (KiriKiri Player, BGI Player …) by BundledPlayer id;
+    /// missing means automatic: the copy bundled inside VN Library, else ~/Applications.
+    @Published var playerOverrides: [String: String] {
+        didSet { UserDefaults.standard.set(playerOverrides, forKey: "playerOverrides") }
     }
     @Published var backgroundTheme: BackgroundTheme = BackgroundTheme(rawValue: ProcessInfo.processInfo.environment["VNLIB_THEME"]
         ?? UserDefaults.standard.string(forKey: "backgroundTheme") ?? "") ?? .midnight {
@@ -179,7 +180,11 @@ final class Library: ObservableObject {
             try? FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
         }
         siglusEngine = UserDefaults.standard.string(forKey: "siglusEngine") ?? Self.defaultEngine
-        kirikiriPlayer = UserDefaults.standard.string(forKey: "kirikiriPlayer") ?? ""
+        var overrides = UserDefaults.standard.dictionary(forKey: "playerOverrides") as? [String: String] ?? [:]
+        if let old = UserDefaults.standard.string(forKey: "kirikiriPlayer"), !old.isEmpty, overrides["kirikiri"] == nil {
+            overrides["kirikiri"] = old     // from before there were several players
+        }
+        playerOverrides = overrides
         autoVNDB = UserDefaults.standard.object(forKey: "autoVNDB") as? Bool ?? true
         showEroTags = UserDefaults.standard.object(forKey: "showEroTags") as? Bool ?? true
         discreet = UserDefaults.standard.bool(forKey: "discreet")
@@ -327,10 +332,9 @@ final class Library: ObservableObject {
             var game = detect(url)
             if game.kind != .macApp { game.engine = VNEngine.detect(game.path) }
             if game.engine == .reallive { game.kind = .reallive }
-            if game.engine == .kirikiri && game.kind == .command { game.kind = .kirikiri }
-            if game.kind == .command, game.engine == .unknown, kirikiriCanRun(game.path) {
-                game.engine = .kirikiri
-                game.kind = .kirikiri
+            if game.kind == .command, let kind = playerKind(for: game.path, engine: game.engine) {
+                game.kind = kind
+                if let p = BundledPlayer.of(kind) { game.engine = p.engine }
             }
             if let src = findCoverSource(for: game) { game.cover = importCover(from: src, id: game.id) }
             games.append(game)
@@ -644,7 +648,7 @@ final class Library: ObservableObject {
     func detectKind(of url: URL) -> LaunchKind {
         if url.pathExtension.lowercased() == "app" { return .macApp }
         if isSiglus(url) { return .siglus }
-        return VNEngine.detect(url.path) == .kirikiri || kirikiriCanRun(url.path) ? .kirikiri : .command
+        return playerKind(for: url.path, engine: VNEngine.detect(url.path)) ?? .command
     }
 
     var enginePath: String { (siglusEngine as NSString).expandingTildeInPath }
@@ -696,12 +700,13 @@ final class Library: ObservableObject {
                     }
                 }
             }
-        case .kirikiri:
-            guard kirikiriFound else {
-                alert = "KiriKiri Player wasn't found (it's normally bundled with VN Library).\n\nChoose it under Settings → KiriKiri Player."
+        case .kirikiri, .bgi:
+            let player = BundledPlayer.of(game.kind)!
+            guard playerFound(player) else {
+                alert = "\(player.title) wasn't found (it's normally bundled with VN Library).\n\nChoose it under Settings → \(player.title)."
                 return
             }
-            run(game, executable: kirikiriStart, arguments: [game.path], fullScreen: fullScreen)
+            run(game, executable: playerStart(player), arguments: [game.path], fullScreen: fullScreen)
         case .siglus:
             guard engineFound else {
                 alert = "siglus_engine wasn't found:\n\(enginePath)\n\nSet the right path in Settings (the gear icon)."
@@ -781,10 +786,9 @@ final class Library: ObservableObject {
             var tail = ""
             if let log, let text = try? String(contentsOf: log, encoding: .utf8) {
                 let lines = text.split(separator: "\n")
-                // KiriKiri Player ends with one "KIRIKIRI_PLAYER: <reason>" line.
-                if games[i].kind == .kirikiri, let reason = lines.last(where: { $0.hasPrefix("KIRIKIRI_PLAYER:") }) {
-                    tail = reason.dropFirst("KIRIKIRI_PLAYER:".count).trimmingCharacters(in: .whitespaces)
-                        + "\n\nIf it's a KiriKiri game the player can't run (encrypted, E-mote, data inside the .exe), bring it to the VN-Ports chat for a full port."
+                // Bundled players end with one "<PREFIX>: <reason>" line.
+                if let p = BundledPlayer.of(games[i].kind), let reason = lines.last(where: { $0.hasPrefix(p.reasonPrefix) }) {
+                    tail = reason.dropFirst(p.reasonPrefix.count).trimmingCharacters(in: .whitespaces) + "\n\n" + p.cantRunHint
                 } else {
                     tail = lines.suffix(8).joined(separator: "\n")
                 }

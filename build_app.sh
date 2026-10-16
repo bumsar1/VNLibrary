@@ -40,8 +40,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleName</key>             <string>VN Library</string>
     <key>CFBundleDisplayName</key>      <string>VN Library</string>
     <key>CFBundleIdentifier</key>       <string>dk.cadesign.vnlibrary</string>
-    <key>CFBundleVersion</key>          <string>1.36</string>
-    <key>CFBundleShortVersionString</key><string>1.36</string>
+    <key>CFBundleVersion</key>          <string>1.37</string>
+    <key>CFBundleShortVersionString</key><string>1.37</string>
     <key>CFBundlePackageType</key>      <string>APPL</string>
     <key>CFBundleExecutable</key>       <string>VNLibrary</string>
     <key>CFBundleIconFile</key>         <string>AppIcon</string>
@@ -62,32 +62,33 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </plist>
 PLIST
 
-echo "→ Bundling KiriKiri Player..."
-# Built in the VN-Ports project. Takes the newest version among the
-# installed copy, VN-Ports' build output and the VN-Ports chat's worktrees;
-# builds it if there's none. Its own signature stays intact: VN Library is
-# signed afterwards without --deep.
+# Engine players built in the VN-Ports project. For each, take the newest
+# version among the installed copy, VN-Ports' build output and the VN-Ports
+# chat's worktrees (never building here: their builds need cargo, Java and
+# Xcode). Their own signatures stay intact: VN Library is signed afterwards
+# without --deep.
 PORTS="$HOME/Cowork/Code/VN-Ports"
-PLAYER=""; BEST=""
-for c in "$HOME/Applications/KiriKiri Player.app" "$PORTS/kirikiri-player/build/KiriKiri Player.app" \
-         "$PORTS"/.claude/worktrees/*/kirikiri-player/build/"KiriKiri Player.app"; do
-    [ -x "$c/Contents/MacOS/Start" ] || continue
-    V="$("$c/Contents/MacOS/Start" --version 2>/dev/null | sed -n 's/^KiriKiri Player \([0-9.]*\).*/\1/p')"
-    [ -n "$V" ] || continue
-    if [ -z "$BEST" ] || [ "$(printf '%s\n%s\n' "$BEST" "$V" | sort -V | tail -1)" = "$V" ] && [ "$V" != "$BEST" ]; then
-        BEST="$V"; PLAYER="$c"
+bundle_player() {   # <App name> <VN-Ports folder>
+    local name="$1" dir="$2" player="" best="" c v
+    echo "→ Bundling $name..."
+    for c in "$HOME/Applications/$name.app" "$PORTS/$dir/build/$name.app" "$PORTS"/.claude/worktrees/*/"$dir"/build/"$name.app"; do
+        [ -x "$c/Contents/MacOS/Start" ] || continue
+        v="$("$c/Contents/MacOS/Start" --version 2>/dev/null | sed -n "s/^$name \([0-9.]*\).*/\1/p")"
+        [ -n "$v" ] || continue
+        if [ -z "$best" ] || { [ "$v" != "$best" ] && [ "$(printf '%s\n%s\n' "$best" "$v" | sort -V | tail -1)" = "$v" ]; }; then
+            best="$v"; player="$c"
+        fi
+    done
+    if [ -n "$player" ]; then
+        rm -rf "$RES/$name.app"
+        ditto "$player" "$RES/$name.app"
+        echo "  $("$RES/$name.app/Contents/MacOS/Start" --version 2>/dev/null)"
+    else
+        echo "  ($name not found — build it in VN-Ports/$dir first)"
     fi
-done
-if [ -z "$PLAYER" ] && [ -x "$PORTS/kirikiri-player/build.sh" ]; then
-    "$PORTS/kirikiri-player/build.sh" >/dev/null && PLAYER="$PORTS/kirikiri-player/build/KiriKiri Player.app"
-fi
-if [ -n "$PLAYER" ]; then
-    rm -rf "$RES/KiriKiri Player.app"
-    ditto "$PLAYER" "$RES/KiriKiri Player.app"
-    echo "  $("$RES/KiriKiri Player.app/Contents/MacOS/Start" --version 2>/dev/null)"
-else
-    echo "  (KiriKiri Player not found — KiriKiri games will need it installed separately)"
-fi
+}
+bundle_player "KiriKiri Player" kirikiri-player
+bundle_player "BGI Player" bgi-player
 
 echo "→ Signing and clearing quarantine..."
 # A stable identity keeps the keychain from asking again for the VNDB token
@@ -99,7 +100,7 @@ else
     codesign --force --sign - "$APP" >/dev/null 2>&1 || echo "  (codesign skipped)"
 fi
 xattr -cr "$APP"
-[ -d "$RES/KiriKiri Player.app" ] && { codesign --verify --deep --strict "$APP" 2>/dev/null || echo "  (warning: signature check failed with the bundled player)"; }
+codesign --verify --deep --strict "$APP" 2>/dev/null || echo "  (warning: signature check failed with the bundled players)"
 
 echo ""
 echo "✓ Built: $APP"
