@@ -788,18 +788,27 @@ final class Library: ObservableObject {
         let player = BundledPlayer.of(games[i].kind)
         if status != 0, status != 15, status != 143, elapsed < 10 || player != nil {
             var tail = ""
+            // SIGILL, SIGABRT, SIGBUS, SIGSEGV: the engine itself crashed. A
+            // player's last "<PREFIX>:" line is then just its last notice
+            // (e.g. a missing plugin), not the reason.
+            let crashed = [4, 6, 10, 11].contains(status)
             if let log, let text = try? String(contentsOf: log, encoding: .utf8) {
                 let lines = text.split(separator: "\n")
-                // Bundled players end with one "<PREFIX>: <reason>" line.
-                if let p = player, let reason = lines.last(where: { $0.hasPrefix(p.reasonPrefix) }) {
+                let errors = lines.filter { $0.contains("*ERROR*") || $0.contains("ERROR") || $0.contains("panicked") }
+                if crashed, let p = player {
+                    tail = (errors.isEmpty ? "" : errors.suffix(3).joined(separator: "\n") + "\n\n")
+                        + "The game engine crashed. This game probably needs more than the generic player can do. " + p.cantRunHint
+                } else if let p = player, let reason = lines.last(where: { $0.hasPrefix(p.reasonPrefix) }) {
                     tail = reason.dropFirst(p.reasonPrefix.count).trimmingCharacters(in: .whitespaces) + "\n\n" + p.cantRunHint
-                } else if let p = player, case let errors = lines.filter({ $0.contains("*ERROR*") || $0.contains("ERROR") || $0.contains("panicked") }), !errors.isEmpty {
+                } else if let p = player, !errors.isEmpty {
                     tail = errors.suffix(4).joined(separator: "\n") + "\n\n" + p.cantRunHint
                 } else {
                     tail = lines.suffix(8).joined(separator: "\n")
                 }
             }
-            alert = "\(games[i].name) quit with an error (code \(status)).\n\n\(tail)"
+            alert = crashed ? "\(games[i].name) crashed (signal \(status)).\n\n\(tail)"
+                            : "\(games[i].name) quit with an error (code \(status)).\n\n\(tail)"
+            if ProcessInfo.processInfo.environment["VNLIB_DEBUG"] != nil { NSLog("VNLIB alert: %@", alert ?? "") }
         }
     }
 
