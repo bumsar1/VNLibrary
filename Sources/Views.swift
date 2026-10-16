@@ -750,7 +750,7 @@ struct EditSheet: View {
             return "Runs the folder with siglus_engine, which scales the game to fill the window. Set the path to siglus_engine in Settings."
         case .reallive:
             return "Runs Key's older RealLive / AVG32 games natively with game_launcher_run from siglus_rs (Settings → Build RealLive support)."
-        case .kirikiri, .bgi:
+        case .kirikiri, .bgi, .alicesoft:
             let p = BundledPlayer.of(game.kind)!
             return "Runs the game natively with \(p.title), bundled with VN Library. It takes \(p.accepts) The game's files are never changed; saves live in the player's Application Support folder."
         case .macApp:

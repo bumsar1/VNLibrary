@@ -40,8 +40,8 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleName</key>             <string>VN Library</string>
     <key>CFBundleDisplayName</key>      <string>VN Library</string>
     <key>CFBundleIdentifier</key>       <string>dk.cadesign.vnlibrary</string>
-    <key>CFBundleVersion</key>          <string>1.37</string>
-    <key>CFBundleShortVersionString</key><string>1.37</string>
+    <key>CFBundleVersion</key>          <string>1.38</string>
+    <key>CFBundleShortVersionString</key><string>1.38</string>
     <key>CFBundlePackageType</key>      <string>APPL</string>
     <key>CFBundleExecutable</key>       <string>VNLibrary</string>
     <key>CFBundleIconFile</key>         <string>AppIcon</string>
@@ -89,6 +89,7 @@ bundle_player() {   # <App name> <VN-Ports folder>
 }
 bundle_player "KiriKiri Player" kirikiri-player
 bundle_player "BGI Player" bgi-player
+bundle_player "AliceSoft Player" alicesoft-player
 
 echo "→ Signing and clearing quarantine..."
 # A stable identity keeps the keychain from asking again for the VNDB token

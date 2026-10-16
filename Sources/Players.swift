@@ -11,13 +11,14 @@ import SwiftUI
 /// - `Start --version` prints one line.
 /// - A failed start ends with one "<PREFIX>: <reason>" line on stderr.
 enum BundledPlayer: String, CaseIterable, Identifiable {
-    case kirikiri, bgi
+    case kirikiri, bgi, alicesoft
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .kirikiri: return "KiriKiri Player"
         case .bgi: return "BGI Player"
+        case .alicesoft: return "AliceSoft Player"
         }
     }
     var appName: String { title + ".app" }
@@ -25,18 +26,21 @@ enum BundledPlayer: String, CaseIterable, Identifiable {
         switch self {
         case .kirikiri: return "KIRIKIRI_PLAYER:"
         case .bgi: return "BGI_PLAYER:"
+        case .alicesoft: return "ALICESOFT_PLAYER:"
         }
     }
     var kind: LaunchKind {
         switch self {
         case .kirikiri: return .kirikiri
         case .bgi: return .bgi
+        case .alicesoft: return .alicesoft
         }
     }
     var engine: VNEngine {
         switch self {
         case .kirikiri: return .kirikiri
         case .bgi: return .bgi
+        case .alicesoft: return .alicesoft
         }
     }
     /// What the player accepts, for Settings and Edit.
@@ -46,12 +50,15 @@ enum BundledPlayer: String, CaseIterable, Identifiable {
             return "KiriKiri games: folders with data.xp3 or startup.tjs, older games with everything inside the .exe, and folders whose one subfolder is the game."
         case .bgi:
             return "BGI / Ethornell games (sysprg.arc and system.arc, e.g. Lump of Sugar, August), also when the game is one subfolder down. Unpacked trial versions work as they are."
+        case .alicesoft:
+            return "AliceSoft games on System 3.5–3.9 (.ALD archives, e.g. Rance 4.1) and System 4 (.ain, e.g. Rance 02), also when the game is one subfolder down."
         }
     }
     var cantRunHint: String {
         switch self {
         case .kirikiri: return "If it's a KiriKiri game the player can't run (encrypted, E-mote), bring it to the VN-Ports chat for a full port."
         case .bgi: return "If it's a BGI game the player can't run, bring it to the VN-Ports chat."
+        case .alicesoft: return "If it's an AliceSoft game the player can't run, bring it to the VN-Ports chat."
         }
     }
     /// A cheap look before asking `Start --check`: files the engine needs,
@@ -60,6 +67,7 @@ enum BundledPlayer: String, CaseIterable, Identifiable {
         switch self {
         case .kirikiri: return names.contains { $0.hasSuffix(".exe") || $0.hasSuffix(".xp3") }
         case .bgi: return names.contains("sysprg.arc")
+        case .alicesoft: return names.contains { $0.hasSuffix(".ald") || $0.hasSuffix(".ain") }
         }
     }
 

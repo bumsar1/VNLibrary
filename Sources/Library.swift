@@ -4,7 +4,7 @@ import SwiftUI
 
 /// How a game is started.
 enum LaunchKind: String, Codable, CaseIterable, Identifiable {
-    case siglus, reallive, kirikiri, bgi, macApp, command
+    case siglus, reallive, kirikiri, bgi, alicesoft, macApp, command
     var id: String { rawValue }
     var label: String {
         switch self {
@@ -12,6 +12,7 @@ enum LaunchKind: String, Codable, CaseIterable, Identifiable {
         case .reallive: return "RealLive / AVG32 (game_launcher_run)"
         case .kirikiri: return "KiriKiri (KiriKiri Player)"
         case .bgi: return "BGI / Ethornell (BGI Player)"
+        case .alicesoft: return "AliceSoft System 3.5–4 (AliceSoft Player)"
         case .macApp: return "Mac app"
         case .command: return "Custom command"
         }
@@ -700,7 +701,7 @@ final class Library: ObservableObject {
                     }
                 }
             }
-        case .kirikiri, .bgi:
+        case .kirikiri, .bgi, .alicesoft:
             let player = BundledPlayer.of(game.kind)!
             guard playerFound(player) else {
                 alert = "\(player.title) wasn't found (it's normally bundled with VN Library).\n\nChoose it under Settings → \(player.title)."

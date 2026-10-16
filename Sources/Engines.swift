@@ -4,7 +4,7 @@ import Foundation
 /// it natively on a Mac when something does.
 enum VNEngine: String, Codable {
     case siglus, reallive, kirikiri, renpy, nscripter, tyrano, rpgmaker, unity, artemis
-    case catsystem, bgi, yuris, qlie, wolf, unknown
+    case catsystem, bgi, yuris, qlie, wolf, alicesoft, unknown
 
     var name: String {
         switch self {
@@ -22,6 +22,7 @@ enum VNEngine: String, Codable {
         case .yuris: return "YU-RIS"
         case .qlie: return "QLIE"
         case .wolf: return "WOLF RPG Editor"
+        case .alicesoft: return "AliceSoft System 3.5–4"
         case .unknown: return "Unknown"
         }
     }
@@ -37,6 +38,7 @@ enum VNEngine: String, Codable {
         case .tyrano: return "TyranoScript games are HTML: they run in an NW.js or browser build on Mac."
         case .rpgmaker: return "RPG Maker MV/MZ games are HTML: they run with NW.js for Mac (copy the www folder into an NW.js app)."
         case .unity: return "Unity games need the developer's Mac build, or Whisky / CrossOver."
+        case .alicesoft: return "Runs natively with AliceSoft Player — choose “AliceSoft” under Edit → Launch with. If a game won't run in it, bring it to the VN-Ports chat."
         case .bgi: return "Runs natively with BGI Player — choose “BGI / Ethornell” under Edit → Launch with. If a game won't run in it, bring it to the VN-Ports chat."
         case .artemis, .catsystem, .yuris, .qlie, .wolf:
             return "No native Mac runner that I know of: try Whisky / CrossOver (right-click → Try with Whisky / CrossOver)."
@@ -44,7 +46,7 @@ enum VNEngine: String, Codable {
         }
     }
 
-    var native: Bool { [.siglus, .reallive, .kirikiri, .bgi, .renpy, .nscripter, .tyrano, .rpgmaker].contains(self) }
+    var native: Bool { [.siglus, .reallive, .kirikiri, .bgi, .alicesoft, .renpy, .nscripter, .tyrano, .rpgmaker].contains(self) }
 
     /// Looks at the top two levels of a game folder.
     static func detect(_ folder: String) -> VNEngine {
@@ -69,6 +71,7 @@ enum VNEngine: String, Codable {
         if has("scene.pck") || has("gameexe.dat") { return .siglus }
         if has("gameexe.ini") && (has("seen.txt") || names.contains { $0.hasPrefix("seen") && $0.hasSuffix(".txt") }) { return .reallive }
         if exts.contains("xp3") || has("startup.tjs") { return .kirikiri }
+        if exts.contains("ain") || exts.contains("ald") { return .alicesoft }
         if dirs.contains("renpy") || exts.contains("rpa") || exts.contains("rpyc") { return .renpy }
         if has("nscript.dat") || has("0.txt") || has("00.txt") || exts.contains("nsa") || exts.contains("sar") { return .nscripter }
         if dirs.contains("tyrano") || has("tyrano.js") { return .tyrano }
