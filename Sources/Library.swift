@@ -82,6 +82,10 @@ final class Library: ObservableObject {
     @Published var kirikiriPlayer: String {
         didSet { UserDefaults.standard.set(kirikiriPlayer, forKey: "kirikiriPlayer") }
     }
+    @Published var backgroundTheme: BackgroundTheme = BackgroundTheme(rawValue: ProcessInfo.processInfo.environment["VNLIB_THEME"]
+        ?? UserDefaults.standard.string(forKey: "backgroundTheme") ?? "") ?? .midnight {
+        didSet { UserDefaults.standard.set(backgroundTheme.rawValue, forKey: "backgroundTheme") }
+    }
     @Published var autoVNDB: Bool {
         didSet { UserDefaults.standard.set(autoVNDB, forKey: "autoVNDB") }
     }

@@ -136,7 +136,7 @@ struct ContentView: View {
                 grid
             }
         }
-        .background(Color.kBackground)
+        .background(AppBackground())
         .overlay {
             if couch {
                 CouchView(close: { setCouch(false) }).environmentObject(lib)
@@ -856,6 +856,9 @@ struct SettingsSheet: View {
                     Stepper(value: $lib.dailyCharGoal, in: 0...200_000, step: 2_500) {
                         Text(lib.dailyCharGoal == 0 ? "Daily reading goal: off" : "Daily reading goal: \(lib.dailyCharGoal.formatted()) characters")
                     }
+                }
+                Section("Background") {
+                    BackgroundThemePicker()
                 }
                 Section("Couch mode") {
                     Toggle("Open couch mode when a controller is connected", isOn: $lib.autoCouch)
