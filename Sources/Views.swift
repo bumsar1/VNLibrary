@@ -803,6 +803,7 @@ struct SettingsSheet: View {
                 } footer: {
                     Text("Used for every Siglus game (Key games like Summer Pockets, Clannad, …).")
                 }
+                KiriKiriPlayerSection().environmentObject(lib)
                 Section("VNDB data") {
                     Toggle("Fetch cover and info from VNDB when a game is added", isOn: $lib.autoVNDB)
                     Toggle("Show sexual-content tags (pink)", isOn: $lib.showEroTags)
@@ -869,7 +870,6 @@ struct SettingsSheet: View {
                 } footer: {
                     Text("Blurs every cover and hides adult games and sexual tags. Toggle it any time with ⌘⇧D or the eye button.")
                 }
-                KiriKiriPlayerSection().environmentObject(lib)
                 VNDBAccountSection().environmentObject(lib)
             }
             .formStyle(.grouped)
