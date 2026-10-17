@@ -352,8 +352,11 @@ final class Library: ObservableObject {
                 game.kind = kind
                 if let p = BundledPlayer.of(kind) { game.engine = p.engine }
             }
-            // No native way to run it: Whisky / CrossOver when that's the default.
-            if game.kind == .command, wineByDefault, WineRunner.from(key: defaultWineRunner) != nil,
+            // No native way to run it: Whisky / CrossOver when that's the default,
+            // or when the game's engine has a player that turned it down (e.g.
+            // an encrypted KiriKiri archive) and a default bottle is set.
+            let turnedDown = game.engine.flatMap(BundledPlayer.of) != nil
+            if game.kind == .command, wineByDefault || turnedDown, WineRunner.from(key: defaultWineRunner) != nil,
                !executables(in: game.path).isEmpty {
                 game.kind = .wine
             }
@@ -833,7 +836,8 @@ final class Library: ObservableObject {
                     tail = (errors.isEmpty ? "" : errors.suffix(3).joined(separator: "\n") + "\n\n")
                         + "The game engine crashed. This game probably needs more than the generic player can do. " + p.cantRunHint
                 } else if let p = player, let reason = lines.last(where: { $0.hasPrefix(p.reasonPrefix) }) {
-                    tail = reason.dropFirst(p.reasonPrefix.count).trimmingCharacters(in: .whitespaces) + "\n\n" + p.cantRunHint
+                    tail = reason.dropFirst(p.reasonPrefix.count).trimmingCharacters(in: .whitespaces)
+                        + "\n\nYou can play it through Whisky or CrossOver instead: Edit → Launch with → Whisky / CrossOver.\n\n" + p.cantRunHint
                 } else if let p = player, !errors.isEmpty {
                     tail = errors.suffix(4).joined(separator: "\n") + "\n\n" + p.cantRunHint
                 } else {

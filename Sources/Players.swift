@@ -140,8 +140,10 @@ extension Library {
 
     /// The launch kind for a folder: a bundled player when one recognises it.
     func playerKind(for folder: String, engine: VNEngine?) -> LaunchKind? {
+        // The player has the last word: e.g. KiriKiri Player turns down data.xp3
+        // archives encrypted with a key inside the Windows exe.
         if let e = engine, let p = BundledPlayer.of(e), playerFound(p),
-           Self.runQuick(playerStart(p), ["--check", folder]) != nil || e == .kirikiri {
+           Self.runQuick(playerStart(p), ["--check", folder]) != nil {
             return p.kind
         }
         return playerThatCanRun(folder)?.kind
