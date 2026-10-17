@@ -56,7 +56,7 @@ enum BundledPlayer: String, CaseIterable, Identifiable {
     }
     var cantRunHint: String {
         switch self {
-        case .kirikiri: return "If it's a KiriKiri game the player can't run (encrypted, E-mote), bring it to the VN-Ports chat for a full port."
+        case .kirikiri: return "If it's a KiriKiri game the player can't run (encrypted, or with unusual plugins), bring it to the VN-Ports chat for a full port."
         case .bgi: return "If it's a BGI game the player can't run, bring it to the VN-Ports chat."
         case .alicesoft: return "If it's an AliceSoft game the player can't run, bring it to the VN-Ports chat."
         }
