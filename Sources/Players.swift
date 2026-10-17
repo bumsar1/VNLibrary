@@ -54,6 +54,14 @@ enum BundledPlayer: String, CaseIterable, Identifiable {
             return "AliceSoft games on System 3.5–3.9 (.ALD archives, e.g. Rance 4.1) and System 4 (.ain, e.g. Rance 02), also when the game is one subfolder down."
         }
     }
+    /// Something the player can't do yet, shown wherever its games appear.
+    var knownLimit: String? {
+        switch self {
+        case .bgi: return "Loading saves doesn't work in BGI Player yet (saving does). Use Whisky / CrossOver if you need to load saves."
+        default: return nil
+        }
+    }
+
     var cantRunHint: String {
         switch self {
         case .kirikiri: return "If it's a KiriKiri game the player can't run (encrypted, or with unusual plugins), bring it to the VN-Ports chat for a full port."
@@ -211,7 +219,7 @@ struct PlayerSection: View {
         } header: {
             Text(player.title)
         } footer: {
-            Text("Runs \(player.accepts) Built in the VN-Ports project.")
+            Text("Runs \(player.accepts) Built in the VN-Ports project." + (player.knownLimit.map { "\n\nKnown limit: " + $0 } ?? ""))
         }
         .task(id: resolved.start) {
             let start = resolved.start

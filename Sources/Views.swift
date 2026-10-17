@@ -770,6 +770,7 @@ struct EditSheet: View {
         case .kirikiri, .bgi, .alicesoft:
             let p = BundledPlayer.of(game.kind)!
             return "Runs the game natively with \(p.title), bundled with VN Library. It takes \(p.accepts) The game's files are never changed; saves live in the player's Application Support folder."
+                + (p.knownLimit.map { " Known limit: " + $0 } ?? "")
         case .macApp:
             return "Opens a regular Mac app, e.g. a Ren'Py port or a CrossOver shortcut."
         case .command:

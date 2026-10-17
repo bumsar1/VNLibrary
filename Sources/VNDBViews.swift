@@ -54,6 +54,11 @@ struct InfoSheet: View {
                 }
                 FlowChips(items: facts(game))
                 if let j = game.jiten { JitenLine(info: j) }
+                if let limit = BundledPlayer.of(game.kind)?.knownLimit {
+                    Label(limit, systemImage: "exclamationmark.triangle")
+                        .font(.system(size: 11)).foregroundStyle(Color.kFlame)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if let e = game.engine, e != .unknown, lib.exists(game), game.kind == .command || !e.native || e == .reallive && game.kind != .reallive
                     || BundledPlayer.of(e).map({ $0.kind != game.kind }) == true {
                     // How this engine plays on a Mac, when it isn't already set up natively.
