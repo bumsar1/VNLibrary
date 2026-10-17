@@ -123,15 +123,26 @@ extension Library {
 
     /// The player that can run a folder detection didn't settle, by asking
     /// `Start --check` (quick, starts no engine). Only players whose files are
-    /// at the top of the folder or one level down are asked.
+    /// in the folder or up to three folders below are asked.
     func playerThatCanRun(_ folder: String) -> BundledPlayer? {
+        // File names down to three folders below (the players find a single game
+        // that deep, e.g. trial/190412_trial/game/), capped so a huge folder stays quick.
         let fm = FileManager.default
-        func names(_ dir: String) -> [String] { ((try? fm.contentsOfDirectory(atPath: dir)) ?? []).map { $0.lowercased() } }
-        var all = Set(names(folder))
-        for item in (try? fm.contentsOfDirectory(atPath: folder)) ?? [] {
-            var d: ObjCBool = false
-            let sub = (folder as NSString).appendingPathComponent(item)
-            if fm.fileExists(atPath: sub, isDirectory: &d), d.boolValue { all.formUnion(names(sub)) }
+        var all = Set<String>()
+        var level = [folder]
+        var visited = 0
+        for _ in 0...3 {
+            var next: [String] = []
+            for dir in level where visited < 300 {
+                visited += 1
+                for item in (try? fm.contentsOfDirectory(atPath: dir)) ?? [] where !item.hasPrefix(".") {
+                    all.insert(item.lowercased())
+                    let sub = (dir as NSString).appendingPathComponent(item)
+                    var d: ObjCBool = false
+                    if fm.fileExists(atPath: sub, isDirectory: &d), d.boolValue, !item.hasSuffix(".app") { next.append(sub) }
+                }
+            }
+            level = next
         }
         return BundledPlayer.allCases.first { p in
             p.mightRun(all) && playerFound(p) && Self.runQuick(playerStart(p), ["--check", folder]) != nil
