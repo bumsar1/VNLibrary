@@ -40,6 +40,20 @@ enum WineRunner: Hashable, Identifiable {
         return out
     }
 
+    /// Stored in settings and games: "whisky:<prefix>" or "crossover:<name>".
+    var key: String {
+        switch self {
+        case .whisky(_, let prefix): return "whisky:" + prefix
+        case .crossover(let name): return "crossover:" + name
+        }
+    }
+
+    /// The bottle for a stored key, if it still exists on this Mac.
+    static func from(key: String) -> WineRunner? {
+        guard !key.isEmpty else { return nil }
+        return available().first { $0.key == key }
+    }
+
     /// The bottle folder (holds system.reg and drive_c).
     var bottleDir: String {
         switch self {
@@ -217,9 +231,11 @@ struct WineTrySheet: View {
                 }
                 .disabled(cmd == nil || lib.running[game.id] != nil)
                 Button("Keep This Setup") {
-                    guard let cmd, let i = lib.games.firstIndex(where: { $0.id == game.id }) else { return }
-                    lib.games[i].kind = .command
-                    lib.games[i].command = cmd
+                    guard cmd != nil, let runner, let i = lib.games.firstIndex(where: { $0.id == game.id }) else { return }
+                    lib.games[i].kind = .wine
+                    lib.games[i].wineRunner = runner.key
+                    lib.games[i].wineExe = exe.hasPrefix(game.path + "/") ? String(exe.dropFirst(game.path.count + 1)) : exe
+                    lib.games[i].wineJapanese = japanese
                     lib.save()
                     dismiss()
                 }
@@ -232,7 +248,7 @@ struct WineTrySheet: View {
         .onAppear {
             exes = lib.executables(in: game.path)
             exe = exes.first ?? ""
-            runner = runners.first
+            runner = WineRunner.from(key: lib.defaultWineRunner) ?? runners.first
         }
     }
 

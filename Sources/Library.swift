@@ -4,7 +4,7 @@ import SwiftUI
 
 /// How a game is started.
 enum LaunchKind: String, Codable, CaseIterable, Identifiable {
-    case siglus, reallive, kirikiri, bgi, alicesoft, macApp, command
+    case siglus, reallive, kirikiri, bgi, alicesoft, wine, macApp, command
     var id: String { rawValue }
     var label: String {
         switch self {
@@ -13,6 +13,7 @@ enum LaunchKind: String, Codable, CaseIterable, Identifiable {
         case .kirikiri: return "KiriKiri (KiriKiri Player)"
         case .bgi: return "BGI / Ethornell (BGI Player)"
         case .alicesoft: return "AliceSoft System 3.5–4 (AliceSoft Player)"
+        case .wine: return "Whisky / CrossOver"
         case .macApp: return "Mac app"
         case .command: return "Custom command"
         }
@@ -49,6 +50,12 @@ struct Game: Codable, Identifiable, Equatable {
     var sizeBytes: Int64?
     var readChars: Int?           // characters read, from Meikipop's text log
     var finishAsked: Bool?        // "mark as finished?" was offered once
+    // Whisky / CrossOver (kind .wine): the bottle (WineRunner.key; nil = the
+    // default bottle from Settings), the .exe relative to the game folder
+    // (nil = the likeliest one) and the Japanese locale (nil = on).
+    var wineRunner: String?
+    var wineExe: String?
+    var wineJapanese: Bool?
     var isAdult: Bool { adult ?? !(vndb?.eroTags ?? []).isEmpty }
     /// Added from Discover without a game folder or app yet.
     var installed: Bool { !path.isEmpty }
@@ -87,6 +94,14 @@ final class Library: ObservableObject {
     @Published var backgroundTheme: BackgroundTheme = BackgroundTheme(rawValue: ProcessInfo.processInfo.environment["VNLIB_THEME"]
         ?? UserDefaults.standard.string(forKey: "backgroundTheme") ?? "") ?? .midnight {
         didSet { UserDefaults.standard.set(backgroundTheme.rawValue, forKey: "backgroundTheme") }
+    }
+    /// Settings → Wine: the bottle Windows games use by default (WineRunner.key),
+    /// and whether new games no bundled player can run go to it automatically.
+    @Published var defaultWineRunner: String = UserDefaults.standard.string(forKey: "defaultWineRunner") ?? "" {
+        didSet { UserDefaults.standard.set(defaultWineRunner, forKey: "defaultWineRunner") }
+    }
+    @Published var wineByDefault: Bool = UserDefaults.standard.bool(forKey: "wineByDefault") {
+        didSet { UserDefaults.standard.set(wineByDefault, forKey: "wineByDefault") }
     }
     @Published var autoVNDB: Bool {
         didSet { UserDefaults.standard.set(autoVNDB, forKey: "autoVNDB") }
@@ -336,6 +351,11 @@ final class Library: ObservableObject {
             if game.kind == .command, let kind = playerKind(for: game.path, engine: game.engine) {
                 game.kind = kind
                 if let p = BundledPlayer.of(kind) { game.engine = p.engine }
+            }
+            // No native way to run it: Whisky / CrossOver when that's the default.
+            if game.kind == .command, wineByDefault, WineRunner.from(key: defaultWineRunner) != nil,
+               !executables(in: game.path).isEmpty {
+                game.kind = .wine
             }
             if let src = findCoverSource(for: game) { game.cover = importCover(from: src, id: game.id) }
             games.append(game)
@@ -701,6 +721,19 @@ final class Library: ObservableObject {
                     }
                 }
             }
+        case .wine:
+            guard let runner = WineRunner.from(key: game.wineRunner ?? defaultWineRunner) else {
+                alert = "No Whisky or CrossOver bottle is chosen for \(game.name). Pick one under Edit, or a default bottle under Settings → Wine."
+                return
+            }
+            let exe = game.wineExe.map { (game.path as NSString).appendingPathComponent($0) } ?? executables(in: game.path).first
+            guard let exe, FileManager.default.fileExists(atPath: exe) else {
+                alert = "No Windows program (.exe) was found for \(game.name). Choose it under Edit."
+                return
+            }
+            let cmd = runner.command(exe: exe, japanese: game.wineJapanese ?? true)
+            prepareWineBottle(forCommand: cmd)
+            run(game, executable: "/bin/zsh", arguments: ["-lc", cmd], fullScreen: fullScreen)
         case .kirikiri, .bgi, .alicesoft:
             let player = BundledPlayer.of(game.kind)!
             guard playerFound(player) else {

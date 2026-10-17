@@ -712,6 +712,21 @@ struct EditSheet: View {
                     CompanionList(paths: Binding(get: { game.companions ?? [] },
                                                  set: { game.companions = $0.isEmpty ? nil : $0 }))
                 }
+                if game.kind == .wine {
+                    let exes = lib.executables(in: game.path)
+                    Picker("Program", selection: Binding(get: { game.wineExe ?? "" }, set: { game.wineExe = $0.isEmpty ? nil : $0 })) {
+                        Text("Automatic (\(exes.first.map { ($0 as NSString).lastPathComponent } ?? "none found"))").tag("")
+                        ForEach(exes, id: \.self) { p in
+                            let rel = p.hasPrefix(game.path + "/") ? String(p.dropFirst(game.path.count + 1)) : p
+                            Text(rel).tag(rel)
+                        }
+                    }
+                    Picker("Bottle", selection: Binding(get: { game.wineRunner ?? "" }, set: { game.wineRunner = $0.isEmpty ? nil : $0 })) {
+                        Text("Default (\(WineRunner.from(key: lib.defaultWineRunner)?.label ?? "none set"))").tag("")
+                        ForEach(WineRunner.available()) { Text($0.label).tag($0.key) }
+                    }
+                    Toggle("Japanese locale", isOn: Binding(get: { game.wineJapanese ?? true }, set: { game.wineJapanese = $0 }))
+                }
                 if game.kind == .command {
                     TextField("Command", text: $game.command, axis: .vertical)
                         .lineLimit(2...4)
@@ -750,6 +765,8 @@ struct EditSheet: View {
             return "Runs the folder with siglus_engine, which scales the game to fill the window. Set the path to siglus_engine in Settings."
         case .reallive:
             return "Runs Key's older RealLive / AVG32 games natively with game_launcher_run from siglus_rs (Settings → Build RealLive support)."
+        case .wine:
+            return "Runs the game's Windows program through Whisky or CrossOver, with a Japanese locale. VN Library gives the bottle Japanese fonts the first time."
         case .kirikiri, .bgi, .alicesoft:
             let p = BundledPlayer.of(game.kind)!
             return "Runs the game natively with \(p.title), bundled with VN Library. It takes \(p.accepts) The game's files are never changed; saves live in the player's Application Support folder."
@@ -862,6 +879,13 @@ struct SettingsSheet: View {
                     }
                 }
                 Section {
+                    let runners = WineRunner.available()
+                    Picker("Default bottle", selection: $lib.defaultWineRunner) {
+                        Text("None").tag("")
+                        ForEach(runners) { Text($0.label).tag($0.key) }
+                    }
+                    Toggle("Open new Windows games with it by default", isOn: $lib.wineByDefault)
+                        .disabled(WineRunner.from(key: lib.defaultWineRunner) == nil)
                     HStack {
                         Text("Japanese text in Whisky / CrossOver bottles")
                         Spacer()
@@ -870,7 +894,7 @@ struct SettingsSheet: View {
                 } header: {
                     Text("Wine")
                 } footer: {
-                    Text("A new bottle has no Japanese fonts, so menus and dialogs show boxes. VN Library adds one automatically before a game starts in a bottle; this does every bottle at once. Quit Wine first.")
+                    Text("Games that a bundled player (Siglus, KiriKiri, BGI, AliceSoft) can run still use it; the default covers the rest. Any game can be switched under Edit → Launch with. A new bottle has no Japanese fonts, so VN Library adds one before a game starts in it; Fix All Bottles does every bottle at once (quit Wine first).")
                 }
                 Section("Background") {
                     BackgroundThemePicker()
