@@ -119,6 +119,11 @@ final class Library: ObservableObject {
     @Published var autoCouch: Bool = UserDefaults.standard.object(forKey: "autoCouch") as? Bool ?? true {
         didSet { UserDefaults.standard.set(autoCouch, forKey: "autoCouch") }
     }
+    /// Text hook: engines we build ourselves (siglus_engine for now) stream
+    /// the shown text to ws://127.0.0.1:6677 when started with VNLIB_TEXTHOOK=1.
+    @Published var textHook: Bool = UserDefaults.standard.object(forKey: "textHook") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(textHook, forKey: "textHook") }
+    }
     @Published var blurSuggestive: Bool {
         didSet { UserDefaults.standard.set(blurSuggestive, forKey: "blurSuggestive") }
     }
@@ -704,7 +709,10 @@ final class Library: ObservableObject {
             let cfg = NSWorkspace.OpenConfiguration()
             // Games whose window can't be made full screen from outside can
             // read this and go full screen themselves (the PinPoint port does).
-            if fullScreen { cfg.environment = ["VNLIB_FULLSCREEN": "1"] }
+            var appEnv: [String: String] = [:]
+            if fullScreen { appEnv["VNLIB_FULLSCREEN"] = "1" }
+            if textHook { appEnv["VNLIB_TEXTHOOK"] = "1" }
+            if !appEnv.isEmpty { cfg.environment = appEnv }
             NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: game.path), configuration: cfg) { app, error in
                 let appPID = app?.processIdentifier
                 let message = error?.localizedDescription
@@ -776,6 +784,8 @@ final class Library: ObservableObject {
         var env = ProcessInfo.processInfo.environment
         env["GAME_DIR"] = game.path
         if fullScreen { env["VNLIB_FULLSCREEN"] = "1" }
+        // Engines that don't know it ignore it.
+        if textHook { env["VNLIB_TEXTHOOK"] = "1" } else { env["VNLIB_TEXTHOOK"] = nil }
         p.environment = env
         let log = logURL(game)
         FileManager.default.createFile(atPath: log.path, contents: nil)

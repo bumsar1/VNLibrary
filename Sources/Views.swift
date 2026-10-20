@@ -825,6 +825,16 @@ struct SettingsSheet: View {
                 } footer: {
                     Text("Used for every Siglus game (Key games like Summer Pockets, Clannad, …).")
                 }
+                Section {
+                    Toggle("Send game text to texthooker apps", isOn: $lib.textHook)
+                    LabeledContent("Address") {
+                        Text("ws://127.0.0.1:6677").font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
+                    }
+                } header: {
+                    Text("Text hook")
+                } footer: {
+                    Text("Like Textractor: the game sends each line as it appears, read straight from the engine (no OCR). Texthooker pages and GameSentenceMiner connect to the address above. Works with Siglus games for now; applies the next time a game starts.")
+                }
                 ForEach(BundledPlayer.allCases) { PlayerSection(player: $0).environmentObject(lib) }
                 Section("VNDB data") {
                     Toggle("Fetch cover and info from VNDB when a game is added", isOn: $lib.autoVNDB)
