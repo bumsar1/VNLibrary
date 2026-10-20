@@ -82,6 +82,8 @@ final class Library: ObservableObject {
 
     @Published var games: [Game] = []
     @Published var running: [UUID: Date] = [:]
+    /// Whether a running game's engine serves its text (see TextHookStatus.swift).
+    @Published var textHookState: [UUID: TextHookState] = [:]
     @Published var alert: String?
     @Published var siglusEngine: String {
         didSet { UserDefaults.standard.set(siglusEngine, forKey: "siglusEngine") }
@@ -819,11 +821,13 @@ final class Library: ObservableObject {
         beginSession(id, pid: pid)
         markPlayingIfNew(id)
         startCompanions(id, gamePID: couchPID)
+        watchTextHook(id, pid: pid)
     }
 
     private func finished(_ id: UUID, status: Int32, log: URL?) {
         processes[id] = nil
         guard let start = running.removeValue(forKey: id) else { return }
+        textHookState[id] = nil
         let elapsed = Date().timeIntervalSince(start)
         endSession(id)     // adds the active time to the game's total
         stopCompanions(id)

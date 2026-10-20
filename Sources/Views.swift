@@ -539,6 +539,13 @@ struct GameCard: View {
                                 .padding(.horizontal, 12).padding(.vertical, 5)
                                 .background(Capsule().fill(Color.kDone.opacity(0.9)))
                                 .foregroundStyle(.black)
+                            if let hook = lib.textHookState[game.id] {
+                                Label(hook.label, systemImage: hook.symbol)
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundStyle(.white.opacity(0.9))
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 6)
+                            }
                             if hover {
                                 Button("Stop") { lib.stop(game.id) }
                                     .buttonStyle(.plain)
@@ -625,7 +632,7 @@ struct GameCard: View {
     }
 
     private var subtitle: String {
-        if isRunning { return "Running now" }
+        if isRunning { return "Running now" + (lib.textHookState[game.id].map { " · " + $0.label } ?? "") }
         if lib.fetching.contains(game.id) { return "Fetching from VNDB…" }
         if sort == .coverage {
             guard let j = game.jiten else { return "Not on jiten.moe" }
