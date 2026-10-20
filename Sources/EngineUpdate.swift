@@ -68,11 +68,19 @@ enum EngineUpdate {
         let commit: Inner
     }
 
+    /// A checkout carrying local patches (e.g. the VNLIB_TEXTHOOK branch in
+    /// ~/siglus_rs) names the original repo `upstream`; updates then come from
+    /// upstream/main and are merged into the current branch.
+    static func hasUpstream(_ repo: URL) async -> Bool {
+        await run("/usr/bin/git", ["remote", "get-url", "upstream"], in: repo).0 == 0
+    }
+
     static func check(enginePath: String) async -> Status {
         guard let repo = repo(for: enginePath) else { return .noRepo }
         let local = await git(["rev-parse", "HEAD"], in: repo)
-        let branch = await git(["rev-parse", "--abbrev-ref", "HEAD"], in: repo)
-        let origin = await git(["remote", "get-url", "origin"], in: repo)
+        let patched = await hasUpstream(repo)
+        let branch = patched ? "main" : await git(["rev-parse", "--abbrev-ref", "HEAD"], in: repo)
+        let origin = await git(["remote", "get-url", patched ? "upstream" : "origin"], in: repo)
         // github.com/<owner>/<repo>(.git)
         let parts = origin.replacingOccurrences(of: ".git", with: "").split(separator: "/").suffix(2)
         guard parts.count == 2,
@@ -82,7 +90,8 @@ enum EngineUpdate {
             return .failed("Couldn't reach GitHub.")
         }
         let date = String(c.commit.committer.date.prefix(10))
-        return c.sha == local ? .upToDate(date: date)
+        let merged = patched ? await run("/usr/bin/git", ["merge-base", "--is-ancestor", c.sha, "HEAD"], in: repo).0 == 0 : false
+        return c.sha == local || merged ? .upToDate(date: date)
             : .available(message: String(c.commit.message.split(separator: "\n").first ?? ""), date: date)
     }
 }
@@ -139,10 +148,25 @@ extension Library {
         Task {
             if pull {
                 engineUpdate = .building(step: "Downloading changes…")
-                let (pullStatus, pullOut) = await EngineUpdate.run("/usr/bin/git", ["pull", "--ff-only"], in: repo, log: log)
-                guard pullStatus == 0 else {
-                    engineUpdate = .failed("git pull failed: " + (pullOut.split(separator: "\n").last.map(String.init) ?? ""))
-                    return
+                if await EngineUpdate.hasUpstream(repo) {
+                    // Keep the local patches: merge upstream into the current branch.
+                    let (fetchStatus, fetchOut) = await EngineUpdate.run("/usr/bin/git", ["fetch", "upstream"], in: repo, log: log)
+                    guard fetchStatus == 0 else {
+                        engineUpdate = .failed("git fetch failed: " + (fetchOut.split(separator: "\n").last.map(String.init) ?? ""))
+                        return
+                    }
+                    let (mergeStatus, _) = await EngineUpdate.run("/usr/bin/git", ["merge", "--no-edit", "upstream/main"], in: repo, log: log)
+                    guard mergeStatus == 0 else {
+                        await EngineUpdate.run("/usr/bin/git", ["merge", "--abort"], in: repo, log: log)
+                        engineUpdate = .failed("The update conflicts with the local siglus_rs patches; nothing was changed. See the log.")
+                        return
+                    }
+                } else {
+                    let (pullStatus, pullOut) = await EngineUpdate.run("/usr/bin/git", ["pull", "--ff-only"], in: repo, log: log)
+                    guard pullStatus == 0 else {
+                        engineUpdate = .failed("git pull failed: " + (pullOut.split(separator: "\n").last.map(String.init) ?? ""))
+                        return
+                    }
                 }
             }
             engineUpdate = .building(step: "Building (a few minutes)…")
