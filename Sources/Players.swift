@@ -56,10 +56,7 @@ enum BundledPlayer: String, CaseIterable, Identifiable {
     }
     /// Something the player can't do yet, shown wherever its games appear.
     var knownLimit: String? {
-        switch self {
-        case .bgi: return "Loading saves doesn't work in BGI Player yet (saving does). Use Whisky / CrossOver if you need to load saves."
-        default: return nil
-        }
+        nil  // none right now (BGI Player 0.1.4 fixed save loading)
     }
 
     var cantRunHint: String {
