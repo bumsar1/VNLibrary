@@ -67,6 +67,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             }
         }
+        // A JSON list of exact lines to delete (like the Delete button) in every game.
+        if let path = env["VNLIB_DELETE_FILE"],
+           let texts = try? JSONDecoder().decode([String].self, from: Data(contentsOf: URL(fileURLWithPath: path))) {
+            MainActor.assumeIsolated {
+                let lib = Library.shared
+                let set = Set(texts)
+                for g in lib.games {
+                    let ids = Set(lib.readLines(game: g.id).filter { set.contains($0.text) }.map(\.id))
+                    if !ids.isEmpty { lib.deleteReadLines(ids, game: g.id) }
+                }
+            }
+        }
         // A JSON list of exact lines to blacklist in every game (one-off clean-ups).
         if let path = env["VNLIB_BLACKLIST_FILE"],
            let texts = try? JSONDecoder().decode([String].self, from: Data(contentsOf: URL(fileURLWithPath: path))) {
