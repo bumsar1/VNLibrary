@@ -97,6 +97,24 @@ Or build it yourself (needs Xcode):
   <img src="docs/couch.png" alt="Couch mode">
 </p>
 
+## Text hook
+
+Like Textractor, but built into the engines: games on VN Library's bundled Siglus, KiriKiri and BGI engines send every line they show, with the speaker's name and where each character is on screen, to `ws://localhost:6677`. Nothing is read off the screen, so there are no OCR mistakes.
+
+- **Texthooker pages, Yomitan, GameSentenceMiner**: point them at `ws://localhost:6677`, the same as for Textractor's WebSocket extension. With [texthooker-ui](https://renji-xd.github.io/texthooker-ui/), press ▶ (or turn on *Allow new Line during Pause*) so it takes lines in.
+- **[Meikipop](https://github.com/bumsar1/Meikipop-Mac)**: hold Shift over the game's text and the word is looked up straight from the engine's text, with the exact line as the Anki sentence. Menus and choices still use OCR.
+- **Status**: while a game runs, its cover says *Text hook: engine text, no OCR*, or that Meikipop falls back on OCR (Wine games, Mac apps). Turn it off under Settings → Text hook.
+
+<p align="center">
+  <img src="docs/texthook.png" alt="Summer Pockets streaming its lines to texthooker-ui">
+</p>
+
+<p align="center">
+  <img src="docs/texthook-meikipop.png" width="720" alt="Meikipop looking up a word from the engine's text">
+  &nbsp;
+  <img src="docs/texthook-status.png" width="200" alt="A running game's cover with the text hook status">
+</p>
+
 ## Launching games
 
 | Kind | How it starts |
