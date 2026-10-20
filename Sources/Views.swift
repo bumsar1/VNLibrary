@@ -833,7 +833,7 @@ struct SettingsSheet: View {
                 } header: {
                     Text("Text hook")
                 } footer: {
-                    Text("Like Textractor: the game sends each line as it appears, read straight from the engine (no OCR). Texthooker pages and GameSentenceMiner connect to the address above. Works with Siglus games for now; applies the next time a game starts.")
+                    Text("Like Textractor: the game sends each line as it appears, read straight from the engine (no OCR). Texthooker pages and GameSentenceMiner connect to the address above. Works with Siglus, KiriKiri and BGI games (not Wine or Mac apps); applies the next time a game starts.")
                 }
                 ForEach(BundledPlayer.allCases) { PlayerSection(player: $0).environmentObject(lib) }
                 Section("VNDB data") {

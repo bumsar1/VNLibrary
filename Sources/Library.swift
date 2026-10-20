@@ -119,7 +119,7 @@ final class Library: ObservableObject {
     @Published var autoCouch: Bool = UserDefaults.standard.object(forKey: "autoCouch") as? Bool ?? true {
         didSet { UserDefaults.standard.set(autoCouch, forKey: "autoCouch") }
     }
-    /// Text hook: engines we build ourselves (siglus_engine for now) stream
+    /// Text hook: engines we build ourselves (siglus_engine, KiriKiri and BGI Player) stream
     /// the shown text to ws://127.0.0.1:6677 when started with VNLIB_TEXTHOOK=1.
     @Published var textHook: Bool = UserDefaults.standard.object(forKey: "textHook") as? Bool ?? true {
         didSet { UserDefaults.standard.set(textHook, forKey: "textHook") }
