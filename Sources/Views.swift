@@ -823,14 +823,22 @@ struct SettingsSheet: View {
                             .font(.system(size: 12, design: .monospaced))
                         Button("Choose…") { choose() }
                     }
-                    Label(lib.engineFound ? "Found" : "Not found at that path",
-                          systemImage: lib.engineFound ? "checkmark.circle.fill" : "xmark.circle.fill")
-                        .foregroundStyle(lib.engineFound ? Color.kDone : Color.kHinomaru)
-                    EngineUpdateRow()
+                    if lib.usingBundledEngine {
+                        Label("Bundled with VN Library" + (Library.bundledEngineVersion.map { " (\($0))" } ?? ""),
+                              systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(Color.kDone)
+                    } else {
+                        Label(lib.engineFound ? "Found" : "Not found at that path",
+                              systemImage: lib.engineFound ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .foregroundStyle(lib.engineFound ? Color.kDone : Color.kHinomaru)
+                        EngineUpdateRow()
+                    }
                 } header: {
                     Text("Siglus engine")
                 } footer: {
-                    Text("Used for every Siglus game (Key games like Summer Pockets, Clannad, …).")
+                    Text(lib.usingBundledEngine
+                         ? "Used for every Siglus game (Key games like Summer Pockets, Clannad, …) and, with game_launcher_run, Key's older RealLive / AVG32 games. It's updated with VN Library. Choose your own build to use that instead."
+                         : "Used for every Siglus game (Key games like Summer Pockets, Clannad, …). Reset Engine Path to use the one bundled with VN Library.")
                 }
                 Section {
                     Toggle("Send game text to texthooker apps", isOn: $lib.textHook)

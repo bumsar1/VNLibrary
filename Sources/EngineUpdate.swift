@@ -126,7 +126,7 @@ extension Library {
                     return
                 }
                 engineUpdate = .building(step: "Downloading siglus_rs…")
-                let (status, out) = await EngineUpdate.run("/usr/bin/git", ["clone", "--depth", "1", "https://github.com/xmoezzz/siglus_rs", dir.path],
+                let (status, out) = await EngineUpdate.run("/usr/bin/git", ["clone", "--depth", "1", "https://github.com/bumsar1/siglus_rs", dir.path],
                                                            in: home, log: log)
                 guard status == 0 else {
                     engineUpdate = .failed("Download failed: " + (out.split(separator: "\n").last.map(String.init) ?? "see the log"))

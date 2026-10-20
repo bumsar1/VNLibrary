@@ -682,7 +682,29 @@ final class Library: ObservableObject {
         return playerKind(for: url.path, engine: VNEngine.detect(url.path)) ?? .command
     }
 
-    var enginePath: String { (siglusEngine as NSString).expandingTildeInPath }
+    /// siglus_engine (with VNLIB_TEXTHOOK) and game_launcher_run built into
+    /// VN Library.app by build_app.sh, from bumsar1/siglus_rs.
+    static var bundledEngine: String? {
+        guard let dir = Bundle.main.executableURL?.deletingLastPathComponent() else { return nil }
+        let p = dir.appendingPathComponent("siglus_engine").path
+        return FileManager.default.isExecutableFile(atPath: p) ? p : nil
+    }
+    /// The bundled engine is used while the path in Settings is the default
+    /// (or empty); a path the user chose wins.
+    var usingBundledEngine: Bool {
+        let s = siglusEngine.trimmingCharacters(in: .whitespaces)
+        return Self.bundledEngine != nil && (s.isEmpty || s == Self.defaultEngine)
+    }
+    var enginePath: String {
+        if usingBundledEngine, let b = Self.bundledEngine { return b }
+        return (siglusEngine as NSString).expandingTildeInPath
+    }
+    /// "siglus_rs <rev>" of the bundled engine, from Resources/siglus-version.txt.
+    static var bundledEngineVersion: String? {
+        guard let url = Bundle.main.url(forResource: "siglus-version", withExtension: "txt"),
+              let s = try? String(contentsOf: url, encoding: .utf8) else { return nil }
+        return s.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
     var engineFound: Bool { FileManager.default.isExecutableFile(atPath: enginePath) }
 
     // MARK: Launching

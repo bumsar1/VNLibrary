@@ -91,6 +91,30 @@ bundle_player "KiriKiri Player" kirikiri-player
 bundle_player "BGI Player" bgi-player
 bundle_player "AliceSoft Player" alicesoft-player
 
+# siglus_engine (Siglus, with the VNLIB_TEXTHOOK text hook) and
+# game_launcher_run (RealLive / AVG32 / UK2) from the siglus_rs checkout
+# (github.com/bumsar1/siglus_rs, branch vnlib-texthook; MPL-2.0). Never built
+# here: build them there first with
+#   cargo build --release -p siglus_scene_vm --bin siglus_engine -p game_launcher --bin game_launcher_run
+SIGLUS_RS="${SIGLUS_RS:-$HOME/siglus_rs}"
+echo "→ Bundling siglus_engine..."
+if [ -x "$SIGLUS_RS/target/release/siglus_engine" ] && [ -x "$SIGLUS_RS/target/release/game_launcher_run" ]; then
+    cp "$SIGLUS_RS/target/release/siglus_engine" "$SIGLUS_RS/target/release/game_launcher_run" "$MACOS/"
+    mkdir -p "$RES/licenses"
+    cp "$SIGLUS_RS/LICENSE-MPL-2.0" "$RES/licenses/siglus_rs-LICENSE-MPL-2.0.txt"
+    REV="$(git -C "$SIGLUS_RS" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+    echo "siglus_rs $REV" > "$RES/siglus-version.txt"
+    printf 'siglus_engine and game_launcher_run are built from siglus_rs (MPL-2.0).\nSource: https://github.com/bumsar1/siglus_rs (branch vnlib-texthook, commit %s),\nbased on https://github.com/xmoezzz/siglus_rs.\n' "$REV" > "$RES/licenses/siglus_rs-SOURCE.txt"
+    if security find-identity -p codesigning 2>/dev/null | grep -q "Keiko Dev"; then
+        codesign --force --sign "Keiko Dev" "$MACOS/siglus_engine" "$MACOS/game_launcher_run" >/dev/null 2>&1
+    else
+        codesign --force --sign - "$MACOS/siglus_engine" "$MACOS/game_launcher_run" >/dev/null 2>&1
+    fi
+    echo "  siglus_rs $REV"
+else
+    echo "  (not found in $SIGLUS_RS/target/release — Siglus games then need a siglus_engine path in Settings)"
+fi
+
 # Japanese fonts for Whisky / CrossOver bottles (VN-Ports/wine-tools).
 if [ -f "$PORTS/wine-tools/wine-jp-fonts" ]; then
     cp "$PORTS/wine-tools/wine-jp-fonts" "$RES/wine-jp-fonts" && chmod +x "$RES/wine-jp-fonts"

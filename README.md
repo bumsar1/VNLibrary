@@ -40,6 +40,8 @@ Or build it yourself (needs Xcode):
 
 ## Features
 
+- **Siglus games** (Key: Summer Pockets, Clannad, …) run natively with siglus_engine from [siglus_rs](https://github.com/bumsar1/siglus_rs), bundled with the app, so there's nothing to install. Key's older RealLive / AVG32 games run with its `game_launcher_run`, bundled too.
+- **Text hook** — games on the bundled engines (Siglus, KiriKiri, BGI) send the text they show, with the speaker's name and where each character is on screen, to `ws://127.0.0.1:6677` (Textractor-compatible: texthooker pages, Yomitan, GameSentenceMiner). [Meikipop](https://github.com/bumsar1/Meikipop-Mac) then looks words up from it without OCR. While a game runs, its cover says whether it has a text hook or Meikipop falls back on OCR. Settings → Text hook turns it off
 - **KiriKiri games** run natively with KiriKiri Player (krkrsdl2, built in the VN-Ports project): add a raw KiriKiri folder and it's detected and launched with the player.
 - **BGI / Ethornell games** run natively with BGI Player (ethornell-rs), bundled like KiriKiri Player.
 - **AliceSoft games** (System 3.5–3.9 and System 4, e.g. Rance) run natively with AliceSoft Player (xsystem35 / xsystem4), bundled too.
@@ -58,8 +60,8 @@ Or build it yourself (needs Xcode):
 - **Companion apps** — open apps like Meikipop alongside every game, or a single one; they close again when the game quits. From couch mode, Meikipop is told which game was started and picks its window by itself, even in full screen
 - **Weekly goal and Year in Review** — a goal ring on the Activity tab, and a yearly summary: hours, days played, longest streak, best day, months, most played and finished games
 - **Try with Whisky / CrossOver** — run a game's .exe through one of your Wine bottles (with a Japanese locale) to see if it plays well, and keep the setup if it does
-- **siglus_engine updates** — checks GitHub for a newer siglus_rs and pulls + rebuilds it with one click
-- **Engine detection** — recognises SiglusEngine, RealLive/AVG32, KiriKiri, Ren'Py, NScripter, TyranoScript, RPG Maker, Unity and more, and says what runs each natively on a Mac. Key's older RealLive / AVG32 games run with siglus_rs's `game_launcher_run` (built from Settings)
+- **Your own siglus_engine** — choose a self-built siglus_engine in Settings instead of the bundled one; VN Library then checks GitHub for a newer siglus_rs and pulls + rebuilds it with one click
+- **Engine detection** — recognises SiglusEngine, RealLive/AVG32, KiriKiri, Ren'Py, NScripter, TyranoScript, RPG Maker, Unity and more, and says what runs each natively on a Mac. Key's older RealLive / AVG32 games run with siglus_rs's `game_launcher_run` (bundled)
 - **Save backups** — the save folder is copied before every session when it changed (newest 15 kept), with one-click restore
 - **Watched folder** — new game folders that appear there are added automatically
 - **Disk usage** — size of each game, sort by size, and *Move Game Files to Trash* that keeps the game (status, notes, play time) as Not installed
@@ -99,18 +101,20 @@ Or build it yourself (needs Xcode):
 
 | Kind | How it starts |
 |---|---|
-| **Siglus** (Key games: Summer Pockets, Clannad, …) | Detected automatically (`Scene.pck` + `Gameexe.dat`). Runs [`siglus_engine`](https://github.com/xmoezzz/siglus_rs) built from source — it scales the game to fill the window, which the prebuilt Siglus.app doesn't. Set its path under Settings. |
+| **Siglus** (Key games: Summer Pockets, Clannad, …) | Detected automatically (`Scene.pck` + `Gameexe.dat`). Runs the bundled `siglus_engine` ([siglus_rs](https://github.com/bumsar1/siglus_rs): xmoezzz's engine plus the text hook). It scales the game to fill the window, which the prebuilt Siglus.app doesn't. |
 | **Mac app** | Any `.app` — a Ren'Py port, a CrossOver/Whisky shortcut, … |
 | **Custom command** | Run in `zsh` with the game folder as working directory; `$GAME_DIR` is its path. E.g. `open -a Whisky "$GAME_DIR/game.exe"` |
 
-### Building siglus_engine
+### Your own siglus_engine (optional)
+
+VN Library ships siglus_engine and game_launcher_run, built from [bumsar1/siglus_rs](https://github.com/bumsar1/siglus_rs) (MPL-2.0, branch `vnlib-texthook`). To use your own build instead:
 
 ```bash
-git clone --depth 1 https://github.com/xmoezzz/siglus_rs ~/siglus_rs
-cd ~/siglus_rs && cargo build --release -p siglus_scene_vm --bin siglus_engine
+git clone https://github.com/bumsar1/siglus_rs ~/siglus_rs
+cd ~/siglus_rs && cargo build --release -p siglus_scene_vm --bin siglus_engine -p game_launcher --bin game_launcher_run
 ```
 
-The default path in Settings is `~/siglus_rs/target/release/siglus_engine`.
+Then choose `~/siglus_rs/target/release/siglus_engine` in Settings. `build_app.sh` bundles the binaries from `~/siglus_rs` (or `$SIGLUS_RS`).
 
 ---
 
