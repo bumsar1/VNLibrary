@@ -840,16 +840,7 @@ struct SettingsSheet: View {
                          ? "Used for every Siglus game (Key games like Summer Pockets, Clannad, …) and, with game_launcher_run, Key's older RealLive / AVG32 games. It's updated with VN Library. Choose your own build to use that instead."
                          : "Used for every Siglus game (Key games like Summer Pockets, Clannad, …). Reset Engine Path to use the one bundled with VN Library.")
                 }
-                Section {
-                    Toggle("Send game text to texthooker apps", isOn: $lib.textHook)
-                    LabeledContent("Address") {
-                        Text("ws://127.0.0.1:6677").font(.system(size: 12, design: .monospaced)).textSelection(.enabled)
-                    }
-                } header: {
-                    Text("Text hook")
-                } footer: {
-                    Text("Like Textractor: the game sends each line as it appears, read straight from the engine (no OCR). Texthooker pages and GameSentenceMiner connect to the address above. Works with Siglus, KiriKiri and BGI games (not Wine or Mac apps); applies the next time a game starts.")
-                }
+                TextToolSection().environmentObject(lib)
                 ForEach(BundledPlayer.allCases) { PlayerSection(player: $0).environmentObject(lib) }
                 Section("VNDB data") {
                     Toggle("Fetch cover and info from VNDB when a game is added", isOn: $lib.autoVNDB)
@@ -865,7 +856,7 @@ struct SettingsSheet: View {
                 } header: {
                     Text("Open alongside every game")
                 } footer: {
-                    Text("E.g. Meikipop for OCR lookups. They're closed again when the game quits, unless they were already open. Add apps for a single game under Edit.")
+                    Text("E.g. a texthooker page or a timer. They're closed again when the game quits, unless they were already open. Kimochi and Meikipop are opened by the choice under Text & lookups. Add apps for a single game under Edit.")
                 }
                 Section {
                     HStack {
@@ -889,12 +880,14 @@ struct SettingsSheet: View {
                 } footer: {
                     Text("New game folders and apps that appear in the watched folder are added automatically. Games you remove from the library aren't added again.")
                 }
-                Section {
-                    ReadFilterSettings()
-                } header: {
-                    Text("Characters read (Meikipop)")
-                } footer: {
-                    Text("These apply to all games. Per-game blacklists are under a session's Text read.")
+                if lib.textTool != .off {
+                    Section {
+                        ReadFilterSettings()
+                    } header: {
+                        Text("Characters read")
+                    } footer: {
+                        Text("These apply to all games. Per-game blacklists are under a session's Text read.")
+                    }
                 }
                 Section("Goal") {
                     Stepper(value: $lib.weeklyGoal, in: 0...80, step: 1) {

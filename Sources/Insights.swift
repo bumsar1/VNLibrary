@@ -234,7 +234,7 @@ struct KanjiSheet: View {
                     .font(.system(size: 12)).foregroundStyle(.secondary)
                 Spacer()
             }
-            Text("Every kanji in the text Meikipop recorded while you played, counted, and checked against your WaniKani progress.")
+            Text("Every kanji in the text recorded while you played (text hook or Meikipop), counted, and checked against your WaniKani progress.")
                 .font(.system(size: 12)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
 
             if let wk {
@@ -298,7 +298,7 @@ struct KanjiSheet: View {
     private func grid(_ list: [(kanji: String, count: Int)]) -> some View {
         Group {
             if met.isEmpty {
-                Text("No text recorded yet. Play with Meikipop open and the kanji you read show up here.")
+                Text("No text recorded yet. Play a Siglus, KiriKiri or BGI game (or use Meikipop) and the kanji you read show up here.")
                     .foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 200)
             } else {
                 ScrollView {

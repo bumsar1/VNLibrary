@@ -4,9 +4,15 @@ import SwiftUI
 /// Apps that open alongside a game (an OCR popup like Meikipop, a texthooker)
 /// and close again when it quits. Apps that were already running are left alone.
 extension Library {
+    /// The apps to open with a game. The text tool decides about the reader:
+    /// Kimochi is added in Kimochi mode, and Meikipop only opens in Meikipop mode.
     func companions(for game: Game) -> [String] {
         var out = globalCompanions
         for c in game.companions ?? [] where !out.contains(c) { out.append(c) }
+        if textTool == .kimochi, openKimochi, let k = Kimochi.appURL?.path, !out.contains(k) { out.append(k) }
+        if textTool != .meikipop {
+            out.removeAll { Bundle(url: URL(fileURLWithPath: $0))?.bundleIdentifier == Meikipop.bundleID }
+        }
         return out.filter { FileManager.default.fileExists(atPath: $0) }
     }
 

@@ -41,7 +41,7 @@ Or build it yourself (needs Xcode):
 ## Features
 
 - **Siglus games** (Key: Summer Pockets, Clannad, …) run natively with siglus_engine from [siglus_rs](https://github.com/bumsar1/siglus_rs), bundled with the app, so there's nothing to install. Key's older RealLive / AVG32 games run with its `game_launcher_run`, bundled too.
-- **Text hook** — games on the bundled engines (Siglus, KiriKiri, BGI) send the text they show, with the speaker's name and where each character is on screen, to `ws://127.0.0.1:6677` (Textractor-compatible: texthooker pages, Yomitan, GameSentenceMiner). [Meikipop](https://github.com/bumsar1/Meikipop-Mac) then looks words up from it without OCR. While a game runs, its cover says whether it has a text hook or Meikipop falls back on OCR. Settings → Text hook turns it off
+- **Text hook** — games on the bundled engines (Siglus, KiriKiri, BGI) send the text they show, with the speaker's name and where each character is on screen, to `ws://127.0.0.1:6677` (Textractor-compatible: texthooker pages, Yomitan, GameSentenceMiner). [Kimochi](https://kimochiapp.com) (recommended) or Meikipop then looks words up from it without OCR. While a game runs, its cover says whether it has a text hook or the reader falls back on OCR. Settings → Text & lookups → Off turns it off
 - **KiriKiri games** run natively with KiriKiri Player (krkrsdl2, built in the VN-Ports project): add a raw KiriKiri folder and it's detected and launched with the player.
 - **BGI / Ethornell games** run natively with BGI Player (ethornell-rs), bundled like KiriKiri Player.
 - **AliceSoft games** (System 3.5–3.9 and System 4, e.g. Rance) run natively with AliceSoft Player (xsystem35 / xsystem4), bundled too.
@@ -56,8 +56,8 @@ Or build it yourself (needs Xcode):
 - **jiten.moe** — length in characters, difficulty, unique words and kanji for each VN, and with a jiten.moe API key how much of its vocabulary you already know
 - **Japanese titles** — show VNDB's original titles (e.g. グリザイアの果実) instead of romaji
 - **Routes** — the heroines from VNDB as a checklist with portraits; tick off cleared routes, add your own (e.g. a true ending). Cards show "2/8 routes"
-- **Permissions** — couch mode needs **Accessibility** (System Settings → Privacy & Security) to put games in full screen. Grant it, and Meikipop's permissions (see its guide), before you play
-- **Companion apps** — open apps like Meikipop alongside every game, or a single one; they close again when the game quits. From couch mode, Meikipop is told which game was started and picks its window by itself, even in full screen
+- **Permissions** — couch mode needs **Accessibility** (System Settings → Privacy & Security) to put games in full screen. Grant it before you play
+- **Companion apps** — open apps alongside every game, or a single one; they close again when the game quits. Kimochi (or Meikipop) is opened by the choice under Settings → Text & lookups
 - **Weekly goal and Year in Review** — a goal ring on the Activity tab, and a yearly summary: hours, days played, longest streak, best day, months, most played and finished games
 - **Try with Whisky / CrossOver** — run a game's .exe through one of your Wine bottles (with a Japanese locale) to see if it plays well, and keep the setup if it does
 - **Your own siglus_engine** — choose a self-built siglus_engine in Settings instead of the bundled one; VN Library then checks GitHub for a newer siglus_rs and pulls + rebuilds it with one click
@@ -66,7 +66,7 @@ Or build it yourself (needs Xcode):
 - **Watched folder** — new game folders that appear there are added automatically
 - **Disk usage** — size of each game, sort by size, and *Move Game Files to Trash* that keeps the game (status, notes, play time) as Not installed
 - **Easiest for you** — jiten.moe's VNs sorted by how much of the vocabulary you know (with an API key) or by difficulty, in Discover and couch mode
-- **Characters read** — counts the Japanese text you actually read, from what [Meikipop](https://github.com/bumsar1/Meikipop-Mac) recognises on screen while you play. Every line counts once per game: text that types itself out counts when finished, re-reads and the backlog don't count again, and OCR slips of a character or two are caught. Shown per game (with % of the whole text from jiten.moe), per session (with characters per hour), and per week. Click a session's character count to read back the text it counted, search it, and take lines off the count: *Delete* (it can count again if it shows up later) or *Blacklist* (that exact sentence never counts again in this game — for menus and UI text; undo under Blacklist). A built-in, editable list of common VN menu words (セーブ, ロード, オート, SAVE, LOAD …) never counts in any game, nor do lines without Japanese in them
+- **Characters read** — counts the Japanese text you actually read: VN Library listens to the text hook of Siglus, KiriKiri and BGI games (or, in Meikipop mode, reads what [Meikipop](https://github.com/bumsar1/Meikipop-Mac) recognises on screen). Every line counts once per game: text that types itself out counts when finished, re-reads and the backlog don't count again, and OCR slips of a character or two are caught. Shown per game (with % of the whole text from jiten.moe), per session (with characters per hour), and per week. Click a session's character count to read back the text it counted, search it, and take lines off the count: *Delete* (it can count again if it shows up later) or *Blacklist* (that exact sentence never counts again in this game — for menus and UI text; undo under Blacklist). A built-in, editable list of common VN menu words (セーブ, ロード, オート, SAVE, LOAD …) never counts in any game, nor do lines without Japanese in them
 - **Where you left off** — the last lines you read, on the game page and in couch mode
 - **Reading speed** — characters per hour week by week and by time of day, plus an optional daily reading goal in characters
 - **Kanji you've met** — every kanji in the text you've read, counted, and checked against your WaniKani progress (taught, passed, not taught yet, not in WaniKani)
@@ -97,13 +97,24 @@ Or build it yourself (needs Xcode):
   <img src="docs/couch.png" alt="Couch mode">
 </p>
 
+## Lookups with Kimochi
+
+VN Library launches the games and serves their text; the reading itself — dictionary lookups, Anki cards, OCR — is left to **[Kimochi](https://kimochiapp.com)** (free, open source), the recommended reader. Choose it under **Settings → Text & lookups** (the default), and VN Library opens Kimochi with every game:
+
+- **Siglus, KiriKiri and BGI games**: in Kimochi choose *Change source → WebSocket* (`ws://localhost:6677`, its default). Every line comes straight from the engine — no OCR.
+- **Other games** (Wine, Mac apps): pick the game's window as Kimochi's source; it reads the screen with OCR.
+- VN Library listens to the same text, so characters read, reading speed, *Kanji you've met* and *Last read* keep working.
+
+The other choices are **Meikipop** (the previous setup: lookups and characters read through [Meikipop](https://github.com/bumsar1/Meikipop-Mac)) and **Off** (no text hook, no reader app, nothing counted — for when you use another tool).
+
 ## Text hook
 
 Like Textractor, but built into the engines: games on VN Library's bundled Siglus, KiriKiri and BGI engines send every line they show, with the speaker's name and where each character is on screen, to `ws://localhost:6677`. Nothing is read off the screen, so there are no OCR mistakes.
 
 - **Texthooker pages, Yomitan, GameSentenceMiner**: point them at `ws://localhost:6677`, the same as for Textractor's WebSocket extension. With [texthooker-ui](https://renji-xd.github.io/texthooker-ui/), press ▶ (or turn on *Allow new Line during Pause*) so it takes lines in.
-- **[Meikipop](https://github.com/bumsar1/Meikipop-Mac)**: hold Shift over the game's text and the word is looked up straight from the engine's text, with the exact line as the Anki sentence. Menus and choices still use OCR.
-- **Status**: while a game runs, its cover says *Text hook: engine text, no OCR*, or that Meikipop falls back on OCR (Wine games, Mac apps). Turn it off under Settings → Text hook.
+- **[Kimochi](https://kimochiapp.com)**: see above.
+- **[Meikipop](https://github.com/bumsar1/Meikipop-Mac)** (Meikipop mode): hold Shift over the game's text and the word is looked up straight from the engine's text, with the exact line as the Anki sentence. Menus and choices still use OCR.
+- **Status**: while a game runs, its cover says *Text hook: engine text, no OCR*, or that the reader falls back on OCR (Wine games, Mac apps). Turn it off with Settings → Text & lookups → Off.
 
 <p align="center">
   <img src="docs/texthook.png" alt="Summer Pockets streaming its lines to texthooker-ui">

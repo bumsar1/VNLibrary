@@ -1,6 +1,7 @@
 import Foundation
 
-/// Characters read, from the text Meikipop recognises on screen.
+/// Characters read, from the text the game sends over its text hook (Kimochi
+/// mode, see TextTools.swift) or that Meikipop recognises on screen.
 ///
 /// Meikipop appends one JSON line per OCR frame to
 /// ~/Library/Application Support/meikipop/read-log/YYYY-MM-DD.jsonl:
@@ -146,30 +147,39 @@ extension Library {
         try? data.write(to: seenFile(id), options: .atomic)
     }
 
-    /// Reads what Meikipop logged since last time and counts it. Runs on
-    /// every session heartbeat, when a session ends and at start-up.
+    /// Reads what was logged since last time and counts it: Meikipop's read
+    /// log in Meikipop mode, VN Library's own text hook log in Kimochi mode,
+    /// nothing when text features are off. The log not in use is skipped
+    /// past, so switching later doesn't count old text twice. Runs on every
+    /// session heartbeat, when a session ends and at start-up.
     func processReadLog() {
-        let dir = ReadLog.folder
-        guard let files = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)
-            .filter({ $0.pathExtension == "jsonl" }).sorted(by: { $0.lastPathComponent < $1.lastPathComponent }),
-              !files.isEmpty else { return }
         var offsets = (try? JSONDecoder().decode([String: UInt64].self, from: Data(contentsOf: offsetsFile))) ?? [:]
         var touched = Set<UUID>()
         let dec = JSONDecoder()
-        let filter = ReadFilter.current()
+        var filter = ReadFilter.current()
+        filter.ocr = textTool == .meikipop
         let now = Date().timeIntervalSince1970
+        // Meikipop's files keep their bare names as offset keys (as before).
+        let sources: [(dir: URL, key: String, active: Bool)] = [
+            (ReadLog.folder, "", textTool == .meikipop),
+            (HookLog.folder(in: supportDir), "hook/", textTool == .kimochi),
+        ]
 
-        for file in files {
-            let name = file.lastPathComponent
+        for src in sources {
+            let files = ((try? FileManager.default.contentsOfDirectory(at: src.dir, includingPropertiesForKeys: nil)) ?? [])
+                .filter { $0.pathExtension == "jsonl" }.sorted { $0.lastPathComponent < $1.lastPathComponent }
+          for file in files {
+            let name = src.key + file.lastPathComponent
             guard let h = try? FileHandle(forReadingFrom: file) else { continue }
             let start = offsets[name] ?? 0
             try? h.seek(toOffset: start)
             let data = h.readDataToEndOfFile()
             try? h.close()
-            // Only whole lines; a line Meikipop is still writing waits for next time.
+            // Only whole lines; a line still being written waits for next time.
             guard let lastNL = data.lastIndex(of: 0x0A) else { continue }
             let chunk = data[data.startIndex...lastNL]
             offsets[name] = start + UInt64(chunk.count)
+            guard src.active else { continue }
             for line in chunk.split(separator: 0x0A) {
                 guard let f = try? dec.decode(ReadLog.Frame.self, from: Data(line)),
                       let session = sessionIndex(at: f.t, now: now) else { continue }
@@ -181,6 +191,7 @@ extension Library {
                 if !added.isEmpty { credit(added, game: gid, session: session) }
                 touched.insert(gid)
             }
+          }
         }
         // Games no longer running: everything still on screen is finished.
         for gid in Set(readTrackers.keys) where openSessions[gid] == nil {
@@ -488,7 +499,7 @@ struct ReadTextSheet: View {
             if showBlacklist {
                 blacklistView
             } else if list.isEmpty {
-                Text(lines.isEmpty ? "No text kept yet. It's saved from now on while you play with Meikipop open."
+                Text(lines.isEmpty ? "No text kept yet. It's saved while you play, from the text hook (Siglus, KiriKiri, BGI) or Meikipop's OCR."
                                    : "No lines match.")
                     .foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 200)
             } else {
@@ -600,6 +611,8 @@ struct ReadFilter {
     """.split(whereSeparator: \.isWhitespace).map(String.init)
 
     var words: Set<String> = []
+    /// False for text from the text hook: no OCR'd dictionary popup to filter out.
+    var ocr = true
     var japaneseOnly = true
 
     static func current() -> ReadFilter {
@@ -625,7 +638,7 @@ struct ReadFilter {
     }
 
     func ignores(raw: String, normalized n: String) -> Bool {
-        if Self.looksLikePopup(raw) { return true }
+        if ocr && Self.looksLikePopup(raw) { return true }
         // Text in dialogue brackets is speech: 「はい」 always counts, whatever the list says.
         if raw.contains(where: { "「」『』（）".contains($0) }) { return false }
         // A line without kana or kanji is a button, a date or a number.

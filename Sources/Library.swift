@@ -121,11 +121,20 @@ final class Library: ObservableObject {
     @Published var autoCouch: Bool = UserDefaults.standard.object(forKey: "autoCouch") as? Bool ?? true {
         didSet { UserDefaults.standard.set(autoCouch, forKey: "autoCouch") }
     }
+    /// Which app does lookups and OCR next to the games (see TextTools.swift).
+    @Published var textTool: TextTool = TextTool.current {
+        didSet { UserDefaults.standard.set(textTool.rawValue, forKey: "textTool") }
+    }
+    /// Kimochi mode: open Kimochi with every game (closed again when the game quits).
+    @Published var openKimochi: Bool = UserDefaults.standard.object(forKey: "openKimochi") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(openKimochi, forKey: "openKimochi") }
+    }
     /// Text hook: engines we build ourselves (siglus_engine, KiriKiri and BGI Player) stream
     /// the shown text to ws://127.0.0.1:6677 when started with VNLIB_TEXTHOOK=1.
-    @Published var textHook: Bool = UserDefaults.standard.object(forKey: "textHook") as? Bool ?? true {
-        didSet { UserDefaults.standard.set(textHook, forKey: "textHook") }
-    }
+    /// On unless text features are turned off.
+    var textHook: Bool { textTool != .off }
+    /// Per running game: VN Library's own connection to the text hook (Kimochi mode).
+    var hookListeners: [UUID: Task<Void, Never>] = [:]
     @Published var blurSuggestive: Bool {
         didSet { UserDefaults.standard.set(blurSuggestive, forKey: "blurSuggestive") }
     }
@@ -850,6 +859,7 @@ final class Library: ObservableObject {
         processes[id] = nil
         guard let start = running.removeValue(forKey: id) else { return }
         textHookState[id] = nil
+        hookListeners.removeValue(forKey: id)?.cancel()
         let elapsed = Date().timeIntervalSince(start)
         endSession(id)     // adds the active time to the game's total
         stopCompanions(id)

@@ -1,19 +1,24 @@
 import Foundation
 
 /// Whether a running game reads its text from the engine (VNLIB_TEXTHOOK) or
-/// Meikipop has to fall back on OCR.
+/// the reader (Kimochi or Meikipop) has to fall back on OCR.
 enum TextHookState: Equatable {
     case checking   // started; waiting for the engine's WebSocket
     case engine     // the game (or its helper) serves ws://127.0.0.1:6677
-    case ocr        // no hook: Meikipop reads the screen with OCR
-    case off        // the Text hook switch is off
+    case ocr        // no hook: the reader uses OCR
+    case off        // text features are off
 
     var label: String {
         switch self {
         case .checking: return "Looking for a text hook…"
         case .engine: return "Text hook: engine text, no OCR"
-        case .ocr: return "No text hook: Meikipop uses OCR"
-        case .off: return "Text hook off: Meikipop uses OCR"
+        case .ocr:
+            switch TextTool.current {
+            case .kimochi: return "No text hook: Kimochi uses OCR"
+            case .meikipop: return "No text hook: Meikipop uses OCR"
+            case .off: return "No text hook"
+            }
+        case .off: return "Text features off"
         }
     }
     var symbol: String {
@@ -38,7 +43,7 @@ extension Library {
     /// tree listens on the text hook port.
     func watchTextHook(_ id: UUID, pid: pid_t?) {
         guard let game = games.first(where: { $0.id == id }) else { return }
-        guard textHook else { textHookState[id] = .off; return }
+        guard textHook else { return }    // text features off: nothing to show
         guard Self.mayHaveTextHook(game.kind), let pid, pid > 0 else { textHookState[id] = .ocr; return }
         textHookState[id] = .checking
         Task {
@@ -47,6 +52,7 @@ extension Library {
                 guard running[id] != nil else { return }
                 if await Self.textHookOwner(within: pid) {
                     textHookState[id] = .engine
+                    listenToTextHook(id)
                     return
                 }
             }
